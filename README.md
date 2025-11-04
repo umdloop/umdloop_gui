@@ -1,18 +1,15 @@
 ## Getting Started
-Install These Dependencies
-```bash
-Python v3.12
-React
-Node.js
-OpenCV
-Numpy
-ROS2 Humble
-```
+Install these things
+1. Python Versions 3.10-3.12
+2. OpenCV Version 4.0-4.12
+3. React and Node.JS
+4. Flask
+5. Numpy
+6. ROS2 Humble
 
 Navigate into the web gui folder:
 
 ```bash
-cd umdloop_gui-main
 cd umdloop_gui_web
 ```
 
