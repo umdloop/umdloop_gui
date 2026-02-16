@@ -1,12 +1,14 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState,useEffect, Fragment} from 'react';
 
 
 import ROSLIB from "roslib";
+import MapView from "./MapView";
+import { getRosbridgeUrl } from "./config";
 
-export const modes = ["Drone", "Cameras", "Sensors", "ROS2 Entities", "Navigation", "Mission"];
-export const icons = ["drone.png", "camera.png", "sensor.png", "ros2.png", "navigation.png", "mission.png"];
+export const modes = ["Simulation", "Cameras", "Sensors", "ROS2 Entities", "Navigation", "Mission", "Map"];
+export const icons = ["simulation.png", "camera.png", "sensor.png", "ros2.png", "navigation.png", "mission.png", "navigation.png"];
 export const subsystems = ["Drive", "Arm", "Science"];
 
 function NavigationBar( {selectedMode, setSelectedMode} ) {
@@ -32,7 +34,7 @@ function NavigationBar( {selectedMode, setSelectedMode} ) {
               }
               return(
                 <button
-                  key={mode}
+                  key={`${mode}-${idx}`}
                   style={{
                     background: buttonColor,
                     border: "2px solid #1f1e1eff",
@@ -196,41 +198,10 @@ function PageContent({ selectedMode, selectedSubsystem, selectedNavItem, setSele
     return <Mission selectedSubsystem={selectedSubsystem} />;
   }
 }
-
-function Drone() {
+function Simulation( {selectedSubsystem} ) {
   return (
-    <div style={{
-      display: "flex",
-      flexDirection: "column",
-      height: "calc(100vh - 145px)",
-      padding: "8px",
-      background: "#1a1a1a",
-    }}>
-      <div style={{
-        background: "#2b2b2b",
-        borderRadius: "24px",
-        border: "2px solid #3d3d3d",
-        padding: "8px",
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-      }}>
-        <h3 style={{ color: "white", fontSize: "14px", fontWeight: "bold", textAlign: "center", marginBottom: "8px" }}>
-          Drone OSD - UMD Campus
-        </h3>
-        <iframe
-          src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d12419.932642047048!2d-76.94697!3d38.9869!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x89b7c6a3842e16f1%3A0x7e2a6e8d1e7a8e9e!2sUniversity%20of%20Maryland!5e0!3m2!1sen!2sus!4v1700000000000!5m2!1sen!2sus"
-          style={{
-            flex: 1,
-            width: "100%",
-            border: "none",
-            borderRadius: "20px",
-          }}
-          allowFullScreen=""
-          loading="lazy"
-          referrerPolicy="no-referrer-when-downgrade"
-        />
-      </div>
+    <div style={{ padding: "20px" }}>
+      <h2>{selectedSubsystem} - Simulation Mode</h2>
     </div>
   );
 }
@@ -522,235 +493,76 @@ function Sensors( {selectedSubsystem} ) {
   );
 }
 
-function ROS2Entities({ selectedSubsystem, sharedRos, setSharedRos }) {
-  const [rosStatus, setRosStatus] = useState("connecting...");
-  const [messages, setMessages] = useState([]);
-  const [rosInstance, setRosInstance] = useState(null);
+function ROS2Entities( {selectedSubsystem} ) {
+  const map = new Map();
+  const ros = new ROSLIB.Ros({ url: getRosbridgeUrl() });
+  const subscription_topics = [""];
+  const subscription_msg_type = [""];
+  const publisher_topics = [""];
+  const publisher_msg_type = [""];
 
-  // Publisher state
-  const [pubTopic, setPubTopic] = useState("/cmd_vel");
-  const [pubMessageType, setPubMessageType] = useState("geometry_msgs/msg/Twist");
-  const [pubPayload, setPubPayload] = useState('{\n  "linear": {"x": 0.0, "y": 0.0, "z": 0.0},\n  "angular": {"x": 0.0, "y": 0.0, "z": 0.0}\n}');
-  const [publishStatus, setPublishStatus] = useState("");
+  if(selectedSubsystem === "Arm") {
+    const subscription_topics = ["/joint_states", "/controller_input", "/can_tx", "/can_rx"];
+    const subscription_msg_type = ["sensor_msgs/msg/JointState", "sensor_msgs/msg/Joy", "umdloop_theseus_can_messages/msg/CANA", "umdloop_theseus_can_messages/msg/CANA"];
+    const publisher_topics = ["/velocity_controller/commands"];
+    const publisher_msg_type = ["std_msgs/msg/Float64MultiArray"];
+  } else if (selectedSubsystem === "Drive") {
+    const subscription_topics = ["/cmd_vel", "/odom"];
+    const subscription_msg_type = ["geometry_msgs/msg/Twist", "nav_msgs/msg/Odometry"];
+    const publisher_topics = ["/cmd_vel"];
+    const publisher_msg_type = ["geometry_msgs/msg/Twist"];
+  } else if (selectedSubsystem === "Science") {
+    const subscription_topics = [""];
+    const subscription_msg_type = [""];
+    const publisher_topics = [""];
+    const publisher_msg_type = [""];
+  }
 
-  useEffect(() => {
-    const ros = sharedRos || new ROSLIB.Ros({ url: "ws://localhost:9090" });
-    setRosInstance(ros);
-    if (!sharedRos) setSharedRos(ros);
+  for (let i = 0; i < subscription_topics.length; i++) {
+    map.set(subscription_topics[i], subscription_msg_type[i]);
+  }
 
-    ros.on("connection", () => setRosStatus("✅ connected"));
-    ros.on("error", (error) => setRosStatus(`❌ error: ${error}`));
-    ros.on("close", () => setRosStatus("🔴 closed"));
+  var ros_connection_status = "connecting...";
 
-    let subscription_topics = [];
-    let subscription_msg_type = [];
+  // When the Rosbridge server connects, fill the span with id "status" with "successful"
+  ros.on("connection", () => {
+    ros_connection_status = "successful";
+  });
 
-    if (selectedSubsystem === "Arm") {
-      subscription_topics = ["/joint_states", "/controller_input", "/can_tx", "/can_rx"];
-      subscription_msg_type = [
-        "sensor_msgs/msg/JointState",
-        "sensor_msgs/msg/Joy",
-        "umdloop_athena_can_messages/msg/CANA",
-        "umdloop_athena_can_messages/msg/CANA",
-      ];
-    } else if (selectedSubsystem === "Drive") {
-      subscription_topics = ["/cmd_vel", "/odom"];
-      subscription_msg_type = ["geometry_msgs/msg/Twist", "nav_msgs/msg/Odometry"];
-    }
+  // When the Rosbridge server experiences an error, fill the "status" span with the returned error
+  ros.on("error", (error) => {
+    ros_connection_status = `errored out (${error})`;
+  });
 
-    const listeners = subscription_topics.map((topic, i) => {
-      const listener = new ROSLIB.Topic({ ros, name: topic, messageType: subscription_msg_type[i] });
-      listener.subscribe((msg) => {
-        setMessages((prev) => [
-          { topic, msg: JSON.stringify(msg, null, 2) },
-          ...prev.slice(0, 20),
-        ]);
-      });
-      return listener;
+  // When the Rosbridge server shuts down, fill the "status" span with "closed"
+  ros.on("close", () => {
+    ros_connection_status = "closed";
+  });
+
+
+  // Create a listeners for each topic in subscription_topics
+  subscription_topics.forEach((topic, index) => {
+    const listeners = new ROSLIB.Topic({
+      ros,
+      name: topic,
+      messageType: subscription_msg_type[index],
     });
 
-    return () => {
-      listeners.forEach((l) => l.unsubscribe());
-      ros.close();
-    };
-  }, [selectedSubsystem]);
+    // When we receive a message on /my_topic, add its data as a list item to the "messages" ul
+    listeners.subscribe((message) => {
+      const ul = document.getElementById("messages");
+      const newMessage = document.createElement("li");
+      newMessage.appendChild(document.createTextNode(message.data));
+      ul.appendChild(newMessage);
+    });
+  });
 
-  const publishMessage = () => {
-    if (!rosInstance) {
-      setPublishStatus("❌ ROS not connected");
-      return;
-    }
 
-    try {
-      const message = JSON.parse(pubPayload);
-      const topic = new ROSLIB.Topic({
-        ros: rosInstance,
-        name: pubTopic,
-        messageType: pubMessageType,
-      });
-
-      topic.publish(new ROSLIB.Message(message));
-      setPublishStatus(`✅ Published to ${pubTopic}`);
-
-      // Clear status after 3 seconds
-      setTimeout(() => setPublishStatus(""), 3000);
-    } catch (error) {
-      setPublishStatus(`❌ Error: ${error.message}`);
-    }
-  };
-
-  const loadPreset = (preset) => {
-    const presets = {
-      cmd_vel: {
-        topic: "/cmd_vel",
-        type: "geometry_msgs/msg/Twist",
-        payload: '{\n  "linear": {"x": 0.5, "y": 0.0, "z": 0.0},\n  "angular": {"x": 0.0, "y": 0.0, "z": 0.0}\n}'
-      },
-      stop: {
-        topic: "/cmd_vel",
-        type: "geometry_msgs/msg/Twist",
-        payload: '{\n  "linear": {"x": 0.0, "y": 0.0, "z": 0.0},\n  "angular": {"x": 0.0, "y": 0.0, "z": 0.0}\n}'
-      },
-      joint_states: {
-        topic: "/joint_states",
-        type: "sensor_msgs/msg/JointState",
-        payload: '{\n  "name": ["joint1", "joint2"],\n  "position": [0.0, 0.0],\n  "velocity": [0.0, 0.0],\n  "effort": [0.0, 0.0]\n}'
-      },
-      nav_goal: {
-        topic: "/goal_pose",
-        type: "geometry_msgs/msg/PoseStamped",
-        payload: '{\n  "header": {"frame_id": "map"},\n  "pose": {\n    "position": {"x": 0.0, "y": 0.0, "z": 0.0},\n    "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0}\n  }\n}'
-      }
-    };
-
-    if (presets[preset]) {
-      setPubTopic(presets[preset].topic);
-      setPubMessageType(presets[preset].type);
-      setPubPayload(presets[preset].payload);
-    }
-  };
 
   return (
-    <div className="py-4">
-      <h2 className="text-2xl font-semibold text-center">{selectedSubsystem} - ROS2 Entities Mode</h2>
-      <p className="mt-2 text-center">ROS Connection: {rosStatus}</p>
-
-      <div className="max-w-7xl mx-auto mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* PUBLISH SECTION */}
-        <div className="bg-zinc-900 p-6 rounded-xl border border-zinc-700">
-          <h3 className="text-xl font-bold mb-4 text-white">Publish ROS2 Command</h3>
-
-          {/* Presets */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-white mb-2">Quick Presets:</label>
-            <div className="flex gap-2 flex-wrap">
-              <button
-                onClick={() => loadPreset('cmd_vel')}
-                className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm"
-              >
-                Move Forward
-              </button>
-              <button
-                onClick={() => loadPreset('stop')}
-                className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-sm"
-              >
-                Stop
-              </button>
-              <button
-                onClick={() => loadPreset('joint_states')}
-                className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-sm"
-              >
-                Joint States
-              </button>
-              <button
-                onClick={() => loadPreset('nav_goal')}
-                className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded text-sm"
-              >
-                Nav Goal
-              </button>
-            </div>
-          </div>
-
-          {/* Navigation Integration
-          <div className="mb-4 p-3 bg-zinc-800 rounded-lg border border-zinc-600">
-            <label className="block text-sm font-medium text-white mb-2">Navigation Integration:</label>
-            <div className="flex gap-2 items-center">
-              <button
-                onClick={sendWaypointsToNav}
-                className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-sm flex-1"
-              >
-                Sync Waypoints ({navigationWaypoints.length})
-              </button>
-              <div className="text-xs text-gray-400">
-                Rover: ({Math.round(roverPosition.x)}, {Math.round(roverPosition.y)})
-              </div>
-            </div>
-          </div> */}
-
-          {/* Topic Name */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-white mb-2">Topic Name:</label>
-            <input
-              type="text"
-              value={pubTopic}
-              onChange={(e) => setPubTopic(e.target.value)}
-              className="w-full px-3 py-2 bg-zinc-800 text-white rounded border border-zinc-600 focus:border-blue-500 focus:outline-none"
-              placeholder="/cmd_vel"
-            />
-          </div>
-
-          {/* Message Type */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-white mb-2">Message Type:</label>
-            <input
-              type="text"
-              value={pubMessageType}
-              onChange={(e) => setPubMessageType(e.target.value)}
-              className="w-full px-3 py-2 bg-zinc-800 text-white rounded border border-zinc-600 focus:border-blue-500 focus:outline-none"
-              placeholder="geometry_msgs/msg/Twist"
-            />
-          </div>
-
-          {/* Message Payload */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-white mb-2">Message Payload (JSON):</label>
-            <textarea
-              value={pubPayload}
-              onChange={(e) => setPubPayload(e.target.value)}
-              className="w-full px-3 py-2 bg-zinc-800 text-white rounded border border-zinc-600 focus:border-blue-500 focus:outline-none font-mono text-sm"
-              rows="10"
-              placeholder='{"linear": {"x": 0.0, "y": 0.0, "z": 0.0}}'
-            />
-          </div>
-
-          {/* Publish Button */}
-          <button
-            onClick={publishMessage}
-            className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg transition"
-          >
-            Publish Message
-          </button>
-
-          {/* Status */}
-          {publishStatus && (
-            <div className={`mt-3 p-3 rounded ${publishStatus.startsWith('✅') ? 'bg-green-900 text-green-200' : 'bg-red-900 text-red-200'}`}>
-              {publishStatus}
-            </div>
-          )}
-        </div>
-
-        {/* SUBSCRIBE SECTION */}
-        <div className="bg-zinc-900 p-6 rounded-xl border border-zinc-700">
-          <h3 className="text-xl font-bold mb-4 text-white">Incoming Messages</h3>
-          <div className="bg-black text-green-400 p-3 rounded-lg text-left h-[500px] overflow-y-scroll">
-            {messages.length === 0
-              ? <p className="text-zinc-500">No messages received yet...</p>
-              : messages.map((m, i) => (
-                  <pre key={i} className="mb-3 text-xs"><b className="text-yellow-400">{m.topic}</b> →\n{m.msg}</pre>
-                ))}
-          </div>
-        </div>
-      </div>
+    <div style={{ padding: "20px" }}>
+      <h1>{selectedSubsystem} - ROS2 Entities Mode</h1>
+      <p>Connection status: <span id="status">{ros_connection_status}</span></p>
     </div>
   );
 }
