@@ -321,7 +321,9 @@ function Navigation({selectedNavItem}) {
   };
 
   const onPathPlan = async () => {
+    console.log("Path plan clicked", { latitude, longitude, navMode });
     try {
+
       setError("");
       setPathPlanStatus("Sending...");
 
@@ -592,6 +594,7 @@ function Mission( {selectedSubsystem} ) {
 }
 
 export default function LoopGui() {
+  console.log("🔥 LOOP GUI RENDERED");
   const [selectedMode, setSelectedMode] = useState(modes[0]);
   const [selectedSubsystem, setSelectedSubsystem] = useState(subsystems[0]);
   const [selectedNavItem, setSelectedNavItem] = useState(NAVIGATION_BUTTONS[0]);
