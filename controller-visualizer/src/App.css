@@ -1,0 +1,101 @@
+.Controller{
+    position:relative;
+    width:42.2rem;
+    aspect-ratio: 676 / 574;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+}
+.Triggers{
+    display:flex;
+    flex-direction:row;
+    gap:20rem;
+    z-index:1;
+    
+}
+/*Use for outline
+ border: black 2px solid;*/
+.Controller-Bg{
+    
+    inset:0;
+    z-index:0;
+    position:absolute;
+    width:100%;
+    padding-top:114px;
+}
+.Bumpers{
+    display:flex;
+    flex-direction:row;
+    gap:20.4rem;
+    z-index:1
+}
+.center{
+    display:flex;
+    flex-direction:row;
+    justify-content:center;
+    position:absolute;
+    gap:1rem;
+    top:20.4%;
+    z-index:1
+}
+.side_button{
+    padding-top: 20px;
+}
+
+.Arrows{
+    height: 7rem;
+    display:flex;
+    flex-direction: column;
+    align-items: flex-start;      /* centers horizontally */
+    justify-content: center;  /* centers vertically */
+    position:absolute;
+    left: 11%;
+    top:32%;
+    z-index:1;
+    
+}
+.bottomArrow{
+    position:absolute;
+    left:32%;
+    top:55%;
+}
+.topArrow{
+    position:absolute;
+    left: 32%;
+    top:1%;
+
+}
+.HorArrows{
+    display:flex;
+    justify-content:center;
+    gap:0.7rem;
+}
+
+
+.Buttons{
+    display: flex;
+    flex-direction: column;
+    align-items: center;      /* centers horizontally */
+    justify-content: center;  /* centers vertically */
+    gap:0.2rem;
+    z-index:1;
+    position:absolute;
+    top:28%;
+    right:8%
+    
+    
+}
+.HorButtons{
+    display:flex;
+    justify-content:center;
+    gap:3rem
+}
+.axis{
+    flex-direction:row;
+    display:flex;
+    justify-content:center;
+    position:absolute;
+    gap:4rem;
+    z-index:1;
+    top:46%
+}
