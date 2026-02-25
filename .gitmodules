@@ -1,0 +1,4 @@
+[submodule "qgroundcontrol_umd_loop"]
+	path = qgroundcontrol_umd_loop
+	url = https://github.com/ethanhchoi/qgroundcontrol_umd_loop.git
+	branch = Stable_V5.0
