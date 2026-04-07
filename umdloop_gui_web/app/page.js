@@ -7,6 +7,7 @@ import ROSLIB from "roslib";
 import MapView from "./MapView";
 import OperationsWall from "./OperationsWall";
 import { getRosbridgeUrl } from "./config";
+import RamanPlot from "../spectrometer/RamanPlot";
 
 export const modes = ["Operator", "Technician", "Drone", "Navigation"];
 export const icons = ["camera.png", "sensor.png", "camera.png", "navigation.png"];
@@ -858,17 +859,11 @@ function Cameras({ selectedSubsystem, setSelectedSubsystem }) {
         </div>
       );
     } else if (sciencePopup === "spectral") {
-      title = "Spectral Intensity Analysis";
-      const bands = [20, 35, 58, 46, 62, 49, 38, 28];
+      title = "Raman Spectrum Analysis";
       body = (
         <div style={{ display: "grid", gap: "8px" }}>
-          <div style={{ color: "#d8d8d8", fontSize: "13px" }}>Relative signal by wavelength band</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: "6px", alignItems: "end", height: "150px", background: "#171717", border: "1px solid #444", borderRadius: "8px", padding: "10px" }}>
-            {bands.map((p, i) => (
-              <div key={`spec-${i}`} style={{ height: `${p * 2}px`, background: "#2563eb", borderRadius: "4px 4px 0 0" }} title={`Band ${i + 1}: ${p}`} />
-            ))}
-          </div>
-          <div style={{ color: "#a9a9a9", fontSize: "12px" }}>Graph is a placeholder UI panel.</div>
+          <div style={{ color: "#d8d8d8", fontSize: "13px" }}>Live Raman spectrum from spectrometer</div>
+          <RamanPlot wsUrl="ws://localhost:5000/ws/spectrum" width={700} height={400} />
         </div>
       );
     }
