@@ -15,7 +15,8 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-map-gl": "^8.1.0",
-    "roslib": "^1.4.1"
+    "roslib": "^1.4.1",
+    "webgl-plot": "^1.1.2"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

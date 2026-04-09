@@ -3,7 +3,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import ROSLIB from "roslib";
 import MapView from "./MapView";
-import { getRosbridgeUrl } from "./config";
+import { getApiBaseUrl, getRosbridgeUrl } from "../config";
+import { TATTU_HV_6S_22000, buildBatteryHealthSnapshot } from "../battery";
 
 const CONTROL_MODES = ["Drive Command", "Arm Command", "Science Command", "Emergency Stop"];
 
@@ -104,6 +105,7 @@ export default function OperationsWall({ pane = "all", layout = "default" }) {
     ledState: "GREEN",
     sensorTemp: 41.2,
   });
+  const apiBaseUrl = getApiBaseUrl();
 
   const armFeeds = ARM_PRESETS[armPresetIdx].feeds;
   const driveFeeds = DRIVE_PRESETS[drivePresetIdx].feeds;
@@ -146,17 +148,53 @@ export default function OperationsWall({ pane = "all", layout = "default" }) {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
+    const loadRadioStatus = async () => {
+      try {
+        const res = await fetch(`${apiBaseUrl}/radio/status`);
+        const data = await res.json();
+        if (cancelled) return;
+
+        setSystemStats((prev) => ({
+          ...prev,
+          radio: Math.max(0, Math.min(100, Number(data.quality_percent) || 0)),
+        }));
+      } catch (_) {
+        if (cancelled) return;
+        setSystemStats((prev) => ({ ...prev, radio: 0 }));
+      }
+    };
+
+    loadRadioStatus();
+    const id = setInterval(loadRadioStatus, 2000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [apiBaseUrl]);
+
+  useEffect(() => {
     const id = setInterval(() => {
       setSystemStats((prev) => ({
         ...prev,
         batteryDrive: Math.max(10, prev.batteryDrive - 0.04),
         batteryArm: Math.max(10, prev.batteryArm - 0.03),
-        radio: Math.max(20, Math.min(100, prev.radio + (Math.random() * 6 - 3))),
         sensorTemp: Math.max(20, Math.min(95, prev.sensorTemp + (Math.random() * 0.8 - 0.4))),
       }));
     }, 1200);
     return () => clearInterval(id);
   }, []);
+
+  const driveBattery = buildBatteryHealthSnapshot({
+    socPercent: systemStats.batteryDrive,
+    temperatureC: systemStats.sensorTemp,
+  });
+  const armBattery = buildBatteryHealthSnapshot({
+    socPercent: systemStats.batteryArm,
+    temperatureC: systemStats.sensorTemp,
+  });
 
   const odomSummary = useMemo(() => {
     return `${speedMps.toFixed(2)} m/s`;
@@ -165,7 +203,7 @@ export default function OperationsWall({ pane = "all", layout = "default" }) {
   const submitGoal = async () => {
     try {
       setGoalStatus("Sending...");
-      const res = await fetch("http://127.0.0.1:5000/navigation/path-plan", {
+      const res = await fetch(`${apiBaseUrl}/navigation/path-plan`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -293,9 +331,10 @@ export default function OperationsWall({ pane = "all", layout = "default" }) {
     <MonitorShell title="Rover Status & Controls">
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <div style={{ background: "#1a1a1a", border: "1px solid #3d3d3d", borderRadius: 12, padding: 10 }}>
-          <div style={{ fontSize: 12, color: "#d8d8d8", marginBottom: 6 }}>Battery Life (both)</div>
-          <div style={{ fontSize: 12, color: "#efefef" }}>Drive: {systemStats.batteryDrive.toFixed(1)}%</div>
-          <div style={{ fontSize: 12, color: "#efefef" }}>Arm: {systemStats.batteryArm.toFixed(1)}%</div>
+          <div style={{ fontSize: 12, color: "#d8d8d8", marginBottom: 6 }}>Battery Health ({TATTU_HV_6S_22000.cellCount}S HV LiPo)</div>
+          <div style={{ fontSize: 12, color: "#efefef" }}>Drive: {driveBattery.stateOfChargePct.toFixed(1)}% | {driveBattery.packVoltageV.toFixed(2)} V</div>
+          <div style={{ fontSize: 12, color: "#efefef" }}>Arm: {armBattery.stateOfChargePct.toFixed(1)}% | {armBattery.packVoltageV.toFixed(2)} V</div>
+          <div style={{ fontSize: 11, color: "#bdbdbd", marginTop: 4 }}>Full charge is 26.1 V pack-wide for this battery.</div>
         </div>
 
         <div style={{ background: "#1a1a1a", border: "1px solid #3d3d3d", borderRadius: 12, padding: 10 }}>

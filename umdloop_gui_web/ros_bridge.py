@@ -1,54 +1,67 @@
 # ros_bridge.py
 
 import threading
-import rclpy
 
-from rclpy.node import Node
-from rclpy.action import ActionClient
-from rclpy.qos import QoSProfile, DurabilityPolicy, ReliabilityPolicy
+try:
+    import rclpy
+    from rclpy.action import ActionClient
+    from rclpy.node import Node
+    from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+    from std_msgs.msg import String
+    from msgs.action import NavigateToGPS
 
-from std_msgs.msg import String
-from msgs.action import NavigateToGPS
+    ROS_IMPORT_ERROR = None
+except Exception as exc:
+    rclpy = None
+    ActionClient = None
+    Node = object
+    QoSProfile = None
+    DurabilityPolicy = None
+    ReliabilityPolicy = None
+    String = None
+    NavigateToGPS = None
+    ROS_IMPORT_ERROR = exc
+
+
+class RosUnavailableError(RuntimeError):
+    pass
 
 
 class RosGpsClient(Node):
     def __init__(self):
+        if ROS_IMPORT_ERROR is not None:
+            raise RosUnavailableError(
+                "ROS bridge dependencies are unavailable. "
+                "Make sure your ROS 2 environment is sourced and the custom "
+                "`msgs` action package is built."
+            ) from ROS_IMPORT_ERROR
+
         super().__init__("umdloop_gui_ros_bridge")
 
-        # Action client (GNSS navigation)
         self._client = ActionClient(
             self,
             NavigateToGPS,
-            "/navigate_to_gps"
+            "/navigate_to_gps",
         )
 
-        # QoS MUST match bt_navigator subscriber
         qos = QoSProfile(depth=1)
         qos.durability = DurabilityPolicy.TRANSIENT_LOCAL
         qos.reliability = ReliabilityPolicy.RELIABLE
 
-        # nav mode publisher
         self._nav_mode_pub = self.create_publisher(
             String,
             "/nav_mode",
-            qos
+            qos,
         )
 
         self.get_logger().info("RosGpsClient initialized")
 
-    # --------------------------------------------------
-    # Publish navigation mode
-    # --------------------------------------------------
     def publish_nav_mode(self, mode: str):
         msg = String()
         msg.data = mode
         self._nav_mode_pub.publish(msg)
-
         self.get_logger().info(f"Published /nav_mode = '{mode}'")
 
-    # --------------------------------------------------
-    # Send GNSS goal (blocking)
-    # --------------------------------------------------
     def send_gps_goal_blocking(self, lat, lon, tol=0.0, timeout_sec=60.0):
         self.get_logger().info(
             f"Sending GPS goal: lat={lat}, lon={lon}, tol={tol}"
@@ -62,12 +75,11 @@ class RosGpsClient(Node):
         goal.longitude = float(lon)
         goal.position_tolerance = float(tol)
 
-        # send goal async
         send_future = self._client.send_goal_async(goal)
         rclpy.spin_until_future_complete(
             self,
             send_future,
-            timeout_sec=5.0
+            timeout_sec=5.0,
         )
 
         if not send_future.done():
@@ -78,25 +90,19 @@ class RosGpsClient(Node):
         if not goal_handle.accepted:
             return False, False, "Goal rejected"
 
-        # wait for result
         result_future = goal_handle.get_result_async()
         rclpy.spin_until_future_complete(
             self,
             result_future,
-            timeout_sec=timeout_sec
+            timeout_sec=timeout_sec,
         )
 
         if not result_future.done():
             return True, False, "Timed out waiting for result"
 
         result = result_future.result().result
-
         return True, bool(result.success), result.message
 
-
-# ======================================================
-# Singleton ROS context manager
-# ======================================================
 
 class RosContext:
     def __init__(self):
@@ -106,33 +112,31 @@ class RosContext:
         self._lock = threading.Lock()
 
     def start(self):
-        """
-        Safe to call multiple times.
-        Prevents double rclpy.init() crashes.
-        """
         with self._lock:
+            if ROS_IMPORT_ERROR is not None:
+                raise RosUnavailableError(
+                    "ROS bridge dependencies are unavailable. "
+                    "Source your ROS 2 workspace that contains `msgs.action.NavigateToGPS` "
+                    "before using navigation features."
+                ) from ROS_IMPORT_ERROR
 
             if self.started and self.node is not None:
                 return
 
-            # init ROS only if needed
             try:
                 if not rclpy.ok():
                     rclpy.init(args=None)
             except RuntimeError:
-                # already initialized
                 pass
 
-            # create node once
             if self.node is None:
                 self.node = RosGpsClient()
 
-            # start spin thread once
             if self.thread is None or not self.thread.is_alive():
                 self.thread = threading.Thread(
                     target=rclpy.spin,
                     args=(self.node,),
-                    daemon=True
+                    daemon=True,
                 )
                 self.thread.start()
 
@@ -141,16 +145,14 @@ class RosContext:
 
     def shutdown(self):
         with self._lock:
-
             if self.node is not None:
                 self.node.destroy_node()
                 self.node = None
 
-            if rclpy.ok():
+            if rclpy is not None and rclpy.ok():
                 rclpy.shutdown()
 
             self.started = False
 
 
-# global singleton
 ros_context = RosContext()

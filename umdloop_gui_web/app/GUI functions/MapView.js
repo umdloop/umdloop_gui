@@ -4,7 +4,7 @@ import React, { useState, useRef, useCallback, useEffect } from "react";
 import { Map, Marker } from "react-map-gl/maplibre";
 import ROSLIB from "roslib";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { getRosbridgeUrl, useLocalTiles } from "./config";
+import { getRosbridgeUrl, useLocalTiles } from "../config";
 
 const GPS_TOPIC = "/gps/fix";
 const GPS_MSG_TYPE = "sensor_msgs/msg/NavSatFix";

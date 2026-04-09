@@ -1,17 +1,185 @@
+import base64
+import json
+import os
+import re
+import signal
+import ssl
+import subprocess
+import sys
+import time
+from urllib import error as urllib_error
+from urllib import request as urllib_request
+
 import cv2
 from flask import Flask, Response, jsonify, request
 from flask_cors import CORS
-import subprocess
-import os
-import signal
-import sys
 from ultralytics import YOLO
-from ros_bridge import ros_context
+from ros_bridge import RosUnavailableError, ros_context
 
 
 app = Flask(__name__)
 CORS(app)
 process = None
+
+MIKROTIK_HOST = os.getenv("MIKROTIK_HOST", "").strip()
+MIKROTIK_USER = os.getenv("MIKROTIK_USER", "").strip()
+MIKROTIK_PASS = os.getenv("MIKROTIK_PASS", "")
+MIKROTIK_ENDPOINT = os.getenv("MIKROTIK_ENDPOINT", "").strip()
+MIKROTIK_VERIFY_TLS = os.getenv("MIKROTIK_VERIFY_TLS", "false").lower() in {"1", "true", "yes", "on"}
+MIKROTIK_CACHE_TTL_SEC = float(os.getenv("MIKROTIK_CACHE_TTL_SEC", "1.5"))
+MIKROTIK_DEFAULT_ENDPOINTS = [
+    "interface/wireless/registration-table/print",
+    "interface/wifi/registration-table/print",
+]
+_radio_status_cache = {"timestamp": 0.0, "value": None}
+
+
+def _clamp(value, low, high):
+    return max(low, min(high, value))
+
+
+def _empty_radio_status(error=None, source="unavailable"):
+    return {
+        "connected": False,
+        "quality_percent": 0,
+        "rssi_dbm": None,
+        "tx_ccq": None,
+        "rx_ccq": None,
+        "source": source,
+        "error": error,
+    }
+
+
+def _parse_metric(value):
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+
+    match = re.search(r"-?\d+(?:\.\d+)?", str(value))
+    if not match:
+        return None
+    return float(match.group(0))
+
+
+def _source_label(endpoint):
+    if "interface/wifi/" in endpoint:
+        return "wifi registration table"
+    if "interface/wireless/" in endpoint:
+        return "wireless registration table"
+    return endpoint
+
+
+def _compute_quality_percent(rssi_dbm, tx_ccq, rx_ccq):
+    components = []
+
+    if rssi_dbm is not None:
+        signal_score = ((rssi_dbm + 90.0) / 40.0) * 100.0
+        components.append(_clamp(signal_score, 0.0, 100.0))
+    if tx_ccq is not None:
+        components.append(_clamp(tx_ccq, 0.0, 100.0))
+    if rx_ccq is not None:
+        components.append(_clamp(rx_ccq, 0.0, 100.0))
+
+    if not components:
+        return 0
+
+    return int(round(sum(components) / len(components)))
+
+
+def _normalize_registration_row(row, endpoint):
+    tx_rx_ccq = row.get("tx/rx-ccq")
+    tx_rx_parts = re.findall(r"-?\d+(?:\.\d+)?", str(tx_rx_ccq)) if tx_rx_ccq is not None else []
+
+    tx_ccq = _parse_metric(row.get("tx-ccq"))
+    rx_ccq = _parse_metric(row.get("rx-ccq"))
+    if tx_ccq is None and tx_rx_parts:
+        tx_ccq = float(tx_rx_parts[0])
+    if rx_ccq is None and len(tx_rx_parts) > 1:
+        rx_ccq = float(tx_rx_parts[1])
+
+    rssi_dbm = None
+    for key in ("signal-strength", "signal", "rx-signal", "signal-strength-ch0"):
+        rssi_dbm = _parse_metric(row.get(key))
+        if rssi_dbm is not None:
+            break
+
+    return {
+        "connected": True,
+        "quality_percent": _compute_quality_percent(rssi_dbm, tx_ccq, rx_ccq),
+        "rssi_dbm": rssi_dbm,
+        "tx_ccq": tx_ccq,
+        "rx_ccq": rx_ccq,
+        "source": _source_label(endpoint),
+        "error": None,
+    }
+
+
+def _mikrotik_rest_post(endpoint):
+    if not MIKROTIK_HOST or not MIKROTIK_USER or not MIKROTIK_PASS:
+        raise RuntimeError("Set MIKROTIK_HOST, MIKROTIK_USER, and MIKROTIK_PASS to enable radio telemetry")
+
+    url = f"https://{MIKROTIK_HOST}/rest/{endpoint.lstrip('/')}"
+    req = urllib_request.Request(url, data=b"{}", method="POST")
+    token = base64.b64encode(f"{MIKROTIK_USER}:{MIKROTIK_PASS}".encode("utf-8")).decode("ascii")
+    req.add_header("Authorization", f"Basic {token}")
+    req.add_header("Content-Type", "application/json")
+    req.add_header("Accept", "application/json")
+
+    ssl_context = None if MIKROTIK_VERIFY_TLS else ssl._create_unverified_context()
+    with urllib_request.urlopen(req, timeout=2.0, context=ssl_context) as response:
+        payload = response.read().decode("utf-8")
+        if not payload:
+            return []
+        return json.loads(payload)
+
+
+def get_mikrotik_radio_status():
+    now = time.time()
+    cached = _radio_status_cache["value"]
+    if cached is not None and now - _radio_status_cache["timestamp"] < MIKROTIK_CACHE_TTL_SEC:
+        return cached
+
+    endpoints = [MIKROTIK_ENDPOINT] if MIKROTIK_ENDPOINT else list(MIKROTIK_DEFAULT_ENDPOINTS)
+    errors = []
+
+    for endpoint in endpoints:
+        try:
+            payload = _mikrotik_rest_post(endpoint)
+        except urllib_error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="ignore")
+            if exc.code == 404:
+                errors.append(f"{endpoint}: not supported")
+                continue
+            status = _empty_radio_status(
+                error=f"{endpoint}: HTTP {exc.code} {body}".strip(),
+                source=_source_label(endpoint),
+            )
+            _radio_status_cache.update({"timestamp": now, "value": status})
+            return status
+        except Exception as exc:
+            errors.append(f"{endpoint}: {exc}")
+            continue
+
+        if isinstance(payload, dict):
+            rows = payload.get("data") or payload.get("ret") or [payload]
+        elif isinstance(payload, list):
+            rows = payload
+        else:
+            rows = []
+
+        if rows:
+            status = _normalize_registration_row(rows[0], endpoint)
+        else:
+            status = _empty_radio_status(error="No registered MikroTik peers found", source=_source_label(endpoint))
+
+        _radio_status_cache.update({"timestamp": now, "value": status})
+        return status
+
+    status = _empty_radio_status(error="; ".join(errors) if errors else "Unable to query MikroTik radio", source="unavailable")
+    _radio_status_cache.update({"timestamp": now, "value": status})
+    return status
+
 
 def video_stream(camera_index=0):
     cap = cv2.VideoCapture(camera_index)  # 0 = default webcam
@@ -131,6 +299,12 @@ def stop_detection():
     return jsonify({"ok": True, "status": "stopped"}), 200
 
 
+@app.get("/radio/status")
+def radio_status():
+    status = get_mikrotik_radio_status()
+    return jsonify({"ok": True, **status}), 200
+
+
 @app.get("/object-detection/status")
 def status():
     global process
@@ -155,7 +329,10 @@ def navigation_path_plan():
         return jsonify({"ok": False, "error": f"Unknown mode '{ui_mode}'"}), 400
 
     # start ROS once
-    ros_context.start()
+    try:
+        ros_context.start()
+    except RosUnavailableError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 503
 
     # 1) publish nav mode for BT router
     ros_context.node.publish_nav_mode(bt_mode)
