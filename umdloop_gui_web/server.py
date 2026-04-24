@@ -14,7 +14,7 @@ import cv2
 from flask import Flask, Response, jsonify, request
 from flask_cors import CORS
 from ultralytics import YOLO
-from ros_bridge import RosUnavailableError, ros_context
+from ros_bridge import ros_context
 
 
 app = Flask(__name__)
@@ -310,6 +310,14 @@ def status():
     global process
     running = process is not None and process.poll() is None
     return jsonify({"ok": True, "running": running}), 200
+
+@app.get("/navigation/rover-position")
+def rover_position():
+    ros_context.start()
+    pos = ros_context.node.rover_position
+    if pos is None:
+        return jsonify({"ok": True, "fix": False}), 200
+    return jsonify({"ok": True, "fix": True, "latitude": pos["latitude"], "longitude": pos["longitude"]}), 200
 
 
 @app.post("/navigation/path-plan")

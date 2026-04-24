@@ -58,5 +58,15 @@ export default function PageContent({
     );
   }
 
+  if (selectedMode === "Map") {
+    return (
+      <div style={{ height: "100%", minHeight: 0, padding: "10px" }}>
+        <div style={{ border: "1px solid #333", borderRadius: "10px", overflow: "hidden", height: "100%" }}>
+          <MapView selectedSubsystem={selectedSubsystem} titleOverride="Map" />
+        </div>
+      </div>
+    );
+  }
+
   return null;
 }

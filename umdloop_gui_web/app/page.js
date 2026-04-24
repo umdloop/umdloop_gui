@@ -15,7 +15,8 @@ export default function LoopGui() {
   const showSubsystemBar =
     selectedMode !== "Navigation" &&
     selectedMode !== "Drone" &&
-    selectedMode !== "Technician";
+    selectedMode !== "Technician" &&
+    selectedMode !== "Map";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden", background: "#1a1a1a" }}>

@@ -50,7 +50,7 @@ export default function NavigationBar({ selectedMode, setSelectedMode }) {
               setSelectedButton(idx);
             }}
           >
-            <img src={`/${mode}`} alt={mode.replace(".png", "")} style={{ width: "36px", height: "36px" }} />
+            {mode && <img src={`/${mode}`} alt={mode.replace(".png", "")} style={{ width: "36px", height: "36px" }} />}
             <span style={{ color: "white", fontSize: "10px", whiteSpace: "nowrap" }}>{MODES[idx]}</span>
           </button>
         );
