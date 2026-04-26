@@ -1,9 +1,28 @@
 "use client";
 
-import React, { useState, useRef, useCallback, useEffect } from "react";
-import { Map, Marker } from "react-map-gl/maplibre";
+import React, { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { Map, Marker, Source, Layer } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useLocalTiles } from "../config";
+
+const PLAN_LINE_LAYER = {
+  id: "global-plan-line",
+  type: "line",
+  paint: {
+    "line-color": "#3b82f6",
+    "line-width": 3,
+    "line-dasharray": [4, 2],
+  },
+};
+
+const DRIVEN_PATH_LAYER = {
+  id: "driven-path-line",
+  type: "line",
+  paint: {
+    "line-color": "#f59e0b",
+    "line-width": 2,
+  },
+};
 
 export default function MapView({ selectedSubsystem, titleOverride }) {
   const [viewState, setViewState] = useState({
@@ -15,9 +34,18 @@ export default function MapView({ selectedSubsystem, titleOverride }) {
   const [roverPosition, setRoverPosition] = useState(null);
   const [rosStatus, setRosStatus] = useState("no fix");
   const [followRover, setFollowRover] = useState(false);
+
+  // Global plan: raw coords held in a ref; planVersion bumps only when plan actually changes
+  const globalPlanRef = useRef(null);
+  const [planVersion, setPlanVersion] = useState(0);
+
+  // Driven path history — [[lon, lat], ...]
+  const [drivenPath, setDrivenPath] = useState([]);
+  const lastDrivenPoint = useRef(null);
+
   const mapRef = useRef();
 
-  // Poll Flask backend for latest /gps/fix data (sourced from ROS via ros_bridge.py)
+  // Poll Flask backend for latest /gps/fix and accumulate driven path
   useEffect(() => {
     const poll = async () => {
       try {
@@ -27,7 +55,18 @@ export default function MapView({ selectedSubsystem, titleOverride }) {
           const pos = { latitude: data.latitude, longitude: data.longitude };
           setRoverPosition(pos);
           setRosStatus("fix");
-          // Keep map centered on rover when follow mode is active
+
+          // Accumulate driven path; only append if moved more than ~0.5 m
+          const lon = data.longitude;
+          const lat = data.latitude;
+          const last = lastDrivenPoint.current;
+          const MIN_DELTA = 0.000005; // ~0.5 m in degrees
+          if (!last || Math.abs(lon - last[0]) > MIN_DELTA || Math.abs(lat - last[1]) > MIN_DELTA) {
+            const point = [lon, lat];
+            lastDrivenPoint.current = point;
+            setDrivenPath((prev) => [...prev, point]);
+          }
+
           setFollowRover((prev) => {
             if (prev) {
               setViewState((vs) => ({ ...vs, latitude: pos.latitude, longitude: pos.longitude }));
@@ -46,6 +85,53 @@ export default function MapView({ selectedSubsystem, titleOverride }) {
     const id = setInterval(poll, 1000);
     return () => clearInterval(id);
   }, []);
+
+  // Poll Flask backend for latest /plan (global plan from Nav2).
+  // Only bump planVersion (triggering re-render) when the plan actually changes.
+  useEffect(() => {
+    const fetchPlan = async () => {
+      try {
+        const res = await fetch("http://127.0.0.1:5000/navigation/plan");
+        const data = await res.json();
+        if (data.available && data.coordinates?.length >= 2) {
+          const coords = data.coordinates;
+          const prev = globalPlanRef.current;
+          const changed =
+            !prev ||
+            prev.length !== coords.length ||
+            prev[0][0] !== coords[0][0] ||
+            prev[0][1] !== coords[0][1];
+          if (changed) {
+            globalPlanRef.current = coords;
+            setPlanVersion((v) => v + 1);
+          }
+        }
+      } catch {
+        // silently ignore; plan display is optional
+      }
+    };
+
+    fetchPlan();
+    const id = setInterval(fetchPlan, 2000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Stable GeoJSON objects — only recreated when underlying data actually changes
+  const planGeoJSON = useMemo(
+    () =>
+      globalPlanRef.current?.length >= 2
+        ? { type: "Feature", geometry: { type: "LineString", coordinates: globalPlanRef.current } }
+        : null,
+    [planVersion]
+  );
+
+  const drivenGeoJSON = useMemo(
+    () =>
+      drivenPath.length >= 2
+        ? { type: "Feature", geometry: { type: "LineString", coordinates: drivenPath } }
+        : null,
+    [drivenPath]
+  );
 
   // Snap to rover and enable follow mode
   const centerOnRover = () => {
@@ -79,6 +165,11 @@ export default function MapView({ selectedSubsystem, titleOverride }) {
   };
 
   const deleteAllWaypoints = () => setWaypoints([]);
+
+  const clearDrivenPath = () => {
+    setDrivenPath([]);
+    lastDrivenPoint.current = null;
+  };
 
   const MAPTILER_KEY = "DDQqKsPBfdOZOVxgcoy5";
   const tileUrl = useLocalTiles()
@@ -143,8 +234,41 @@ export default function MapView({ selectedSubsystem, titleOverride }) {
           {followRover ? "Following Rover" : "Center on Rover"}
         </button>
 
-        {/* Waypoint controls */}
+        {/* Legend */}
+        <div style={{ display: "flex", alignItems: "center", gap: "14px", fontSize: "12px", opacity: 0.8 }}>
+          {planGeoJSON && (
+            <span style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+              <span style={{ display: "inline-block", width: 20, height: 3, background: "#3b82f6", borderTop: "2px dashed #3b82f6" }} />
+              Global Plan
+            </span>
+          )}
+          {drivenPath.length >= 2 && (
+            <span style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+              <span style={{ display: "inline-block", width: 20, height: 3, background: "#f59e0b" }} />
+              Driven Path
+            </span>
+          )}
+        </div>
+
+        {/* Controls */}
         <div style={{ display: "flex", alignItems: "center", gap: "12px", marginLeft: "auto" }}>
+          {drivenPath.length >= 2 && (
+            <button
+              onClick={clearDrivenPath}
+              style={{
+                padding: "6px 14px",
+                cursor: "pointer",
+                background: "#4b5563",
+                color: "white",
+                border: "none",
+                borderRadius: "6px",
+                fontWeight: 700,
+                fontSize: "13px",
+              }}
+            >
+              Clear Path
+            </button>
+          )}
           <span style={{ fontSize: "13px" }}>Waypoints: {waypoints.length}</span>
           {waypoints.length > 0 && (
             <button
@@ -200,6 +324,20 @@ export default function MapView({ selectedSubsystem, titleOverride }) {
           mapStyle={mapStyle}
           attributionControl={true}
         >
+          {/* Global plan from Nav2 /plan topic */}
+          {planGeoJSON && (
+            <Source id="global-plan" type="geojson" data={planGeoJSON}>
+              <Layer {...PLAN_LINE_LAYER} />
+            </Source>
+          )}
+
+          {/* Driven path accumulated from /gps/fix */}
+          {drivenGeoJSON && (
+            <Source id="driven-path" type="geojson" data={drivenGeoJSON}>
+              <Layer {...DRIVEN_PATH_LAYER} />
+            </Source>
+          )}
+
           {roverPosition && (
             <Marker
               longitude={roverPosition.longitude}

@@ -1,5 +1,6 @@
 # ros_bridge.py
 
+import math
 import threading
 import rclpy
 
@@ -9,7 +10,9 @@ from rclpy.qos import QoSProfile, DurabilityPolicy, ReliabilityPolicy
 
 from std_msgs.msg import String
 from msgs.action import NavigateToGPS
-from sensor_msgs.msg import NavSatFix
+from nav_msgs.msg import Path
+from sensor_msgs.msg import NavSatFix, CompressedImage
+from vision_msgs.msg import Detection2DArray
 
 
 class RosGpsClient(Node):
@@ -18,6 +21,9 @@ class RosGpsClient(Node):
 
         # Latest rover GPS fix (None until first message arrives)
         self.rover_position = None
+
+        # Global plan as [[lon, lat], ...] in GPS coords (None until first /plan arrives)
+        self.plan = None
 
         # Action client (GNSS navigation)
         self._client = ActionClient(
@@ -48,6 +54,43 @@ class RosGpsClient(Node):
             gps_qos,
         )
 
+        # Global plan subscriber — Nav2 planner publishes with VOLATILE durability
+        plan_qos = QoSProfile(depth=1)
+        plan_qos.durability = DurabilityPolicy.VOLATILE
+        plan_qos.reliability = ReliabilityPolicy.RELIABLE
+        self.create_subscription(
+            Path,
+            "/plan",
+            self._plan_callback,
+            plan_qos,
+        )
+
+        # Object detection: latest compressed JPEG + bounding boxes.
+        # The streaming endpoint reads these without decoding here, so the
+        # callback path stays cheap (one bytes() copy per frame).
+        self._frame_cv = threading.Condition()
+        self._latest_jpeg = None
+        self._latest_detections = []
+        self._frame_seq = 0
+
+        cam_qos = QoSProfile(depth=1)
+        cam_qos.reliability = ReliabilityPolicy.BEST_EFFORT
+        self.create_subscription(
+            CompressedImage,
+            "/camera/image_raw/compressed",
+            self._image_callback,
+            cam_qos,
+        )
+
+        det_qos = QoSProfile(depth=1)
+        det_qos.reliability = ReliabilityPolicy.BEST_EFFORT
+        self.create_subscription(
+            Detection2DArray,
+            "/yolo/detections",
+            self._detections_callback,
+            det_qos,
+        )
+
         self.get_logger().info("RosGpsClient initialized")
 
     def _gps_callback(self, msg: NavSatFix):
@@ -56,6 +99,78 @@ class RosGpsClient(Node):
                 "latitude": msg.latitude,
                 "longitude": msg.longitude,
             }
+
+    def _plan_callback(self, msg: Path):
+        if not msg.poses or self.rover_position is None:
+            return
+
+        # Use the first pose (rover's current map position) as the local origin.
+        # Distances from that origin are converted to GPS offsets using a flat-earth
+        # approximation — accurate to <1 m over competition-scale distances (<500 m).
+        anchor_x = msg.poses[0].pose.position.x
+        anchor_y = msg.poses[0].pose.position.y
+        anchor_lat = self.rover_position["latitude"]
+        anchor_lon = self.rover_position["longitude"]
+        cos_lat = math.cos(math.radians(anchor_lat))
+
+        gps_coords = []
+        for pose in msg.poses:
+            dx = pose.pose.position.x - anchor_x
+            dy = pose.pose.position.y - anchor_y
+            lat = anchor_lat + dy / 111111.0
+            lon = anchor_lon + dx / (111111.0 * cos_lat)
+            gps_coords.append([lon, lat])
+
+        self.plan = gps_coords
+        self.get_logger().info(f"Received /plan with {len(gps_coords)} poses")
+
+    # --------------------------------------------------
+    # Object detection stream callbacks
+    # --------------------------------------------------
+    def _image_callback(self, msg: CompressedImage):
+        data = bytes(msg.data)
+        with self._frame_cv:
+            self._latest_jpeg = data
+            self._frame_seq += 1
+            self._frame_cv.notify_all()
+
+    def _detections_callback(self, msg: Detection2DArray):
+        boxes = []
+        for det in msg.detections:
+            bbox = det.bbox
+            center = bbox.center
+            # vision_msgs >= Iron uses center.position.x/.y; older uses center.x/.y
+            if hasattr(center, "position"):
+                cx, cy = center.position.x, center.position.y
+            else:
+                cx, cy = center.x, center.y
+            sx = bbox.size_x
+            sy = bbox.size_y
+            x1 = int(cx - sx / 2.0)
+            y1 = int(cy - sy / 2.0)
+            x2 = int(cx + sx / 2.0)
+            y2 = int(cy + sy / 2.0)
+
+            label = ""
+            score = 0.0
+            if det.results:
+                first = det.results[0]
+                hyp = getattr(first, "hypothesis", first)
+                label = getattr(hyp, "class_id", getattr(hyp, "id", "")) or ""
+                score = float(getattr(hyp, "score", 0.0))
+
+            boxes.append((x1, y1, x2, y2, label, score))
+
+        with self._frame_cv:
+            self._latest_detections = boxes
+
+    def wait_for_frame(self, last_seq, timeout=1.0):
+        with self._frame_cv:
+            self._frame_cv.wait_for(
+                lambda: self._frame_seq != last_seq,
+                timeout=timeout,
+            )
+            return self._frame_seq, self._latest_jpeg, list(self._latest_detections)
 
     # --------------------------------------------------
     # Publish navigation mode

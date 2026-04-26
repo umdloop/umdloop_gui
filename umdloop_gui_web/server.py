@@ -2,24 +2,20 @@ import base64
 import json
 import os
 import re
-import signal
 import ssl
-import subprocess
-import sys
 import time
 from urllib import error as urllib_error
 from urllib import request as urllib_request
 
 import cv2
+import numpy as np
 from flask import Flask, Response, jsonify, request
 from flask_cors import CORS
-from ultralytics import YOLO
 from ros_bridge import ros_context
 
 
 app = Flask(__name__)
 CORS(app)
-process = None
 
 MIKROTIK_HOST = os.getenv("MIKROTIK_HOST", "").strip()
 MIKROTIK_USER = os.getenv("MIKROTIK_USER", "").strip()
@@ -202,100 +198,59 @@ def video_feed(cam_id):
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
-MODEL_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "umdloop_gui_native", "best.pt"))
-model = YOLO(MODEL_PATH)
+def annotated_stream():
+    ros_context.start()
+    node = ros_context.node
 
-def annotated_stream(camera_index=0):
-    cap = cv2.VideoCapture(camera_index)
+    last_seq = -1
     while True:
-        ok, frame = cap.read()
-        if not ok:
-            break
+        seq, jpeg_bytes, detections = node.wait_for_frame(last_seq, timeout=1.0)
+        if jpeg_bytes is None or seq == last_seq:
+            continue
+        last_seq = seq
 
-        results = model(frame, verbose=False)
-
-        # draw boxes on frame
-        for r in results:
-            for box in r.boxes:
-                x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
-                cls_id = int(box.cls[0])
-                conf = float(box.conf[0])
-                name = model.names.get(cls_id, str(cls_id))
-
-                cv2.rectangle(frame, (x1, y1), (x2, y2), (0,255,0), 2)
-                cv2.putText(frame, f"{name} {conf:.2f}", (x1, max(y1-10, 0)),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,255,0), 2)
-
-        # encode frame to jpg
-        ok, buffer = cv2.imencode(".jpg", frame)
-        if not ok:
+        # No detections → pass the JPEG through unchanged (no decode/encode).
+        if not detections:
+            yield (b"--frame\r\n"
+                   b"Content-Type: image/jpeg\r\n\r\n" + jpeg_bytes + b"\r\n")
             continue
 
+        np_arr = np.frombuffer(jpeg_bytes, dtype=np.uint8)
+        frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        if frame is None:
+            yield (b"--frame\r\n"
+                   b"Content-Type: image/jpeg\r\n\r\n" + jpeg_bytes + b"\r\n")
+            continue
+
+        for x1, y1, x2, y2, label, score in detections:
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            text = f"{label} {score:.2f}" if label else f"{score:.2f}"
+            cv2.putText(frame, text, (x1, max(y1 - 8, 0)),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+        ok, buffer = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+        if not ok:
+            continue
         yield (b"--frame\r\n"
                b"Content-Type: image/jpeg\r\n\r\n" + buffer.tobytes() + b"\r\n")
 
-    cap.release()
-
 @app.get("/object-detection/stream/0")
-def object_detection_stream(cam_id=0):
+def object_detection_stream():
     return Response(
-        annotated_stream(cam_id),
+        annotated_stream(),
         mimetype="multipart/x-mixed-replace; boundary=frame"
     )
 
 @app.post("/object-detection/start")
 def start_detection():
-    global process
-    if process is not None and process.poll() is None:
-        return jsonify({"ok": True, "status": "already_running"}), 200
-
-    
-    script_path = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "umdloop_gui_native", "yolo_live_logger.py")
-    )
-
-    if not os.path.exists(script_path):
-        return jsonify({"ok": False, "error": f"Script not found: {script_path}"}), 500
-
-    
-    process = subprocess.Popen(
-        [sys.executable, script_path],
-        cwd=os.path.dirname(script_path),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True
-    )
-
-    return jsonify({"ok": True, "status": "started", "pid": process.pid}), 200
+    try:
+        ros_context.start()
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    return jsonify({"ok": True, "status": "started"}), 200
 
 @app.post("/object-detection/stop")
 def stop_detection():
-    global process
-    if process is None or process.poll() is not None:
-        process = None
-        return jsonify({"ok": True, "status": "not_running"}), 200
-
-    # Try graceful stop 
-    try:
-        process.terminate()  
-        process.wait(timeout=3)
-    except Exception:
-        pass
-
-    #If still alive, force kill the whole tree (Windows guaranteed)
-    if process.poll() is None:
-        try:
-            subprocess.run(
-                ["taskkill", "/F", "/T", "/PID", str(process.pid)],
-                check=False,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-        except Exception:
-            pass
-
-    process = None
     return jsonify({"ok": True, "status": "stopped"}), 200
 
 
@@ -307,8 +262,8 @@ def radio_status():
 
 @app.get("/object-detection/status")
 def status():
-    global process
-    running = process is not None and process.poll() is None
+    node = ros_context.node
+    running = node is not None and node._latest_jpeg is not None
     return jsonify({"ok": True, "running": running}), 200
 
 @app.get("/navigation/rover-position")
@@ -318,6 +273,15 @@ def rover_position():
     if pos is None:
         return jsonify({"ok": True, "fix": False}), 200
     return jsonify({"ok": True, "fix": True, "latitude": pos["latitude"], "longitude": pos["longitude"]}), 200
+
+
+@app.get("/navigation/plan")
+def get_plan():
+    ros_context.start()
+    plan = ros_context.node.plan
+    if plan is None:
+        return jsonify({"ok": True, "available": False}), 200
+    return jsonify({"ok": True, "available": True, "coordinates": plan}), 200
 
 
 @app.post("/navigation/path-plan")
