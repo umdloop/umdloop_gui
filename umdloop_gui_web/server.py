@@ -304,6 +304,11 @@ def radio_status():
     status = get_mikrotik_radio_status()
     return jsonify({"ok": True, **status}), 200
 
+@app.get("/rover/state")
+def rover_state():
+    ros_context.start() 
+    state = ros_context.node.get_rover_state()
+    return jsonify({"ok": True, **state}), 200
 
 @app.get("/object-detection/status")
 def status():
