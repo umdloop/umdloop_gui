@@ -3,62 +3,23 @@
 import React, { useEffect, useMemo, useState } from "react";
 import ROSLIB from "roslib";
 import MapView from "./MapView";
+import CameraFeed from "./CameraFeed";
 import { getApiBaseUrl, getRosbridgeUrl } from "../config";
 import { TATTU_HV_6S_22000, buildBatteryHealthSnapshot } from "../battery";
+import { CAMERA_ROLES } from "./pageConstants";
 
 const CONTROL_MODES = ["Drive Command", "Arm Command", "Science Command", "Emergency Stop"];
 
 const ARM_PRESETS = [
-  { name: "Arm Default", feeds: { mainTop: 8, mainBottom: 10, auxTop: 9, auxBottom: 11 } },
-  { name: "Arm Closeup", feeds: { mainTop: 10, mainBottom: 11, auxTop: 8, auxBottom: 9 } },
+  { name: "Arm Default", feeds: { mainTop: CAMERA_ROLES.ARM_BASE, mainBottom: CAMERA_ROLES.ARM_EE, auxTop: CAMERA_ROLES.ARM_JOINT, auxBottom: CAMERA_ROLES.ARM_GRIPPER } },
+  { name: "Arm Closeup", feeds: { mainTop: CAMERA_ROLES.ARM_EE, mainBottom: CAMERA_ROLES.ARM_GRIPPER, auxTop: CAMERA_ROLES.ARM_BASE, auxBottom: CAMERA_ROLES.ARM_JOINT } },
 ];
 
 const DRIVE_PRESETS = [
-  { name: "Drive Default", feeds: { leftTop: 15, leftBottom: 16, rightTop: 17, rightBottom: 18 } },
-  { name: "Drive Wheels", feeds: { leftTop: 0, leftBottom: 2, rightTop: 4, rightBottom: 6 } },
+  { name: "Drive Default", feeds: { leftTop: CAMERA_ROLES.FRONT, leftBottom: CAMERA_ROLES.BACK, rightTop: CAMERA_ROLES.LEFT_SIDE, rightBottom: CAMERA_ROLES.RIGHT_SIDE } },
+  { name: "Drive Wheels", feeds: { leftTop: CAMERA_ROLES.WHEEL_TL_A, leftBottom: CAMERA_ROLES.WHEEL_TR_A, rightTop: CAMERA_ROLES.WHEEL_BL_A, rightBottom: CAMERA_ROLES.WHEEL_BR_A } },
 ];
 
-function CameraFeed({ cameraId, label, height = 170, rotateDeg = 0 }) {
-  return (
-    <div
-      style={{
-        borderRadius: "16px",
-        overflow: "hidden",
-        border: "2px solid #353535",
-        background: "#111",
-        position: "relative",
-        height,
-      }}
-    >
-      <img
-        src={`http://127.0.0.1:5000/camera/${cameraId}`}
-        alt={label}
-        style={{
-          width: "100%",
-          height: "100%",
-          objectFit: "cover",
-          transform: `rotate(${rotateDeg}deg)`,
-          transformOrigin: "center center",
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          left: 8,
-          bottom: 8,
-          fontSize: 11,
-          fontWeight: 700,
-          color: "white",
-          background: "rgba(0,0,0,0.55)",
-          padding: "3px 7px",
-          borderRadius: 9999,
-        }}
-      >
-        {label}
-      </div>
-    </div>
-  );
-}
 
 function MonitorShell({ title, children }) {
   return (
@@ -227,10 +188,10 @@ export default function OperationsWall({ pane = "all", layout = "default" }) {
   const armMonitor = (
     <MonitorShell title="Arm Related Camera Views">
       <div style={{ display: "grid", gridTemplateColumns: "1.3fr 0.7fr", gridTemplateRows: "1fr 1fr", gap: 8, height: "100%" }}>
-        <CameraFeed cameraId={armFeeds.mainTop} label={`Arm Main A (Cam ${armFeeds.mainTop})`} rotateDeg={armRotate} />
-        <CameraFeed cameraId={armFeeds.auxTop} label={`Arm Aux A (Cam ${armFeeds.auxTop})`} height={150} rotateDeg={armRotate} />
-        <CameraFeed cameraId={armFeeds.mainBottom} label={`Arm Main B (Cam ${armFeeds.mainBottom})`} rotateDeg={armRotate} />
-        <CameraFeed cameraId={armFeeds.auxBottom} label={`Arm Aux B (Cam ${armFeeds.auxBottom})`} height={150} rotateDeg={armRotate} />
+        <CameraFeed role={armFeeds.mainTop} label="Arm Main A" rotateDeg={armRotate} style={{ height: 170 }} />
+        <CameraFeed role={armFeeds.auxTop} label="Arm Aux A" rotateDeg={armRotate} style={{ height: 150 }} />
+        <CameraFeed role={armFeeds.mainBottom} label="Arm Main B" rotateDeg={armRotate} style={{ height: 170 }} />
+        <CameraFeed role={armFeeds.auxBottom} label="Arm Aux B" rotateDeg={armRotate} style={{ height: 150 }} />
       </div>
       <div style={{ display: "flex", gap: 8 }}>
         {ARM_PRESETS.map((preset, idx) => (
@@ -265,10 +226,10 @@ export default function OperationsWall({ pane = "all", layout = "default" }) {
   const driveMonitor = (
     <MonitorShell title="Drive Related Camera Views">
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "1fr 1fr", gap: 8, height: "100%" }}>
-        <CameraFeed cameraId={driveFeeds.leftTop} label={`Drive Left A (Cam ${driveFeeds.leftTop})`} rotateDeg={driveRotate} />
-        <CameraFeed cameraId={driveFeeds.rightTop} label={`Drive Right A (Cam ${driveFeeds.rightTop})`} height={150} rotateDeg={driveRotate} />
-        <CameraFeed cameraId={driveFeeds.leftBottom} label={`Drive Left B (Cam ${driveFeeds.leftBottom})`} rotateDeg={driveRotate} />
-        <CameraFeed cameraId={driveFeeds.rightBottom} label={`Drive Right B (Cam ${driveFeeds.rightBottom})`} height={150} rotateDeg={driveRotate} />
+        <CameraFeed role={driveFeeds.leftTop} label="Drive Left A" rotateDeg={driveRotate} style={{ height: 170 }} />
+        <CameraFeed role={driveFeeds.rightTop} label="Drive Right A" rotateDeg={driveRotate} style={{ height: 150 }} />
+        <CameraFeed role={driveFeeds.leftBottom} label="Drive Left B" rotateDeg={driveRotate} style={{ height: 170 }} />
+        <CameraFeed role={driveFeeds.rightBottom} label="Drive Right B" rotateDeg={driveRotate} style={{ height: 150 }} />
       </div>
       <div style={{ display: "flex", gap: 8 }}>
         {DRIVE_PRESETS.map((preset, idx) => (
@@ -317,9 +278,13 @@ export default function OperationsWall({ pane = "all", layout = "default" }) {
             SPD {odomSummary}
           </div>
         </div>
-        <div style={{ position: "relative", flex: 1, minHeight: 160, borderRadius: 16, overflow: "hidden", border: "2px solid #3b3b3b", background: "#101010" }}>
-          <img src="http://127.0.0.1:5000/camera/15" alt="Drone feed secondary" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-          <div style={{ position: "absolute", top: 8, left: 8, fontSize: 12, fontWeight: 800, color: "#d8ffd8", background: "rgba(0,0,0,0.55)", borderRadius: 8, padding: "5px 8px" }}>
+        <div style={{ position: "relative", flex: 1, minHeight: 160 }}>
+          <CameraFeed
+            role={CAMERA_ROLES.FRONT}
+            label="Front"
+            style={{ height: "100%", minHeight: 160, borderRadius: 16, border: "2px solid #3b3b3b" }}
+          />
+          <div style={{ position: "absolute", top: 8, left: 8, fontSize: 12, fontWeight: 800, color: "#d8ffd8", background: "rgba(0,0,0,0.55)", borderRadius: 8, padding: "5px 8px", pointerEvents: "none" }}>
             GPS {gps.latitude.toFixed(5)}, {gps.longitude.toFixed(5)}
           </div>
         </div>

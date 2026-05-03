@@ -339,7 +339,7 @@ def navigation_path_plan():
     # start ROS once
     try:
         ros_context.start()
-    except RosUnavailableError as exc:
+    except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 503
 
     # 1) publish nav mode for BT router

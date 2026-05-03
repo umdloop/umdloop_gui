@@ -5,6 +5,8 @@ import NavigationBar from "./GUI functions/NavigationBar";
 import PageContent from "./GUI functions/PageContent";
 import SubsystemBar from "./GUI functions/SubsystemBar";
 import { MODES, NAVIGATION_BUTTONS, SUBSYSTEMS } from "./GUI functions/pageConstants";
+import { WebRTCProvider } from "./hooks/WebRTCContext";
+import { getWebRTCUrl } from "./config";
 
 export default function LoopGui() {
   console.log("🔥 LOOP GUI RENDERED");
@@ -19,26 +21,28 @@ export default function LoopGui() {
     selectedMode !== "Map";
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden", background: "#1a1a1a" }}>
-      <NavigationBar selectedMode={selectedMode} setSelectedMode={setSelectedMode} />
+    <WebRTCProvider url={getWebRTCUrl()}>
+      <div style={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden", background: "#1a1a1a" }}>
+        <NavigationBar selectedMode={selectedMode} setSelectedMode={setSelectedMode} />
 
-      {showSubsystemBar ? (
-        <SubsystemBar
-          buttons={SUBSYSTEMS}
-          selected={selectedSubsystem}
-          setSelected={setSelectedSubsystem}
-        />
-      ) : null}
+        {showSubsystemBar ? (
+          <SubsystemBar
+            buttons={SUBSYSTEMS}
+            selected={selectedSubsystem}
+            setSelected={setSelectedSubsystem}
+          />
+        ) : null}
 
-      <div style={{ flex: 1, minHeight: 0, overflow: selectedMode === "Navigation" || selectedMode === "Technician" ? "auto" : "hidden" }}>
-        <PageContent
-          selectedMode={selectedMode}
-          selectedSubsystem={selectedSubsystem}
-          setSelectedSubsystem={setSelectedSubsystem}
-          selectedNavItem={selectedNavItem}
-          setSelectedNavItem={setSelectedNavItem}
-        />
+        <div style={{ flex: 1, minHeight: 0, overflow: selectedMode === "Navigation" || selectedMode === "Technician" ? "auto" : "hidden" }}>
+          <PageContent
+            selectedMode={selectedMode}
+            selectedSubsystem={selectedSubsystem}
+            setSelectedSubsystem={setSelectedSubsystem}
+            selectedNavItem={selectedNavItem}
+            setSelectedNavItem={setSelectedNavItem}
+          />
+        </div>
       </div>
-    </div>
+    </WebRTCProvider>
   );
 }

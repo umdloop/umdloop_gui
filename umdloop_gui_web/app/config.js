@@ -28,6 +28,13 @@ export function getApiBaseUrl() {
   return process.env.NEXT_PUBLIC_GUI_API_URL || "http://127.0.0.1:5000";
 }
 
+export function getWebRTCUrl() {
+  if (typeof window !== "undefined") {
+    return window.__WEBRTC_WS_URL__ ?? "ws://localhost:8081";
+  }
+  return process.env.NEXT_PUBLIC_WEBRTC_WS_URL || "ws://localhost:8081";
+}
+
 
 export const GUI_REQUIRED_TOPICS = {
   gpsFix: {
