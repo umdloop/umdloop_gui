@@ -20,6 +20,7 @@ export const CAMERA_ROLES = {
   BACK:        "back",
   LEFT_SIDE:   "left_side",
   RIGHT_SIDE:  "right_side",
+  RADIO_VIEW:  "radio_view",
   WHEEL_TL_A:  "wheel_tl_a",
   WHEEL_TL_B:  "wheel_tl_b",
   WHEEL_TR_A:  "wheel_tr_a",

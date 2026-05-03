@@ -278,10 +278,10 @@ export default function OperatorTab({ selectedSubsystem, setSelectedSubsystem })
 
   if (selectedSubsystem === "Drive (Default)" || selectedSubsystem === "Drive") {
     const wheelGroups = [
-      { label: "Top Left Wheel", roles: [CAMERA_ROLES.WHEEL_TL_A, CAMERA_ROLES.WHEEL_TL_B] },
-      { label: "Top Right Wheel", roles: [CAMERA_ROLES.WHEEL_TR_A, CAMERA_ROLES.WHEEL_TR_B] },
-      { label: "Bottom Left Wheel", roles: [CAMERA_ROLES.WHEEL_BL_A, CAMERA_ROLES.WHEEL_BL_B] },
-      { label: "Bottom Right Wheel", roles: [CAMERA_ROLES.WHEEL_BR_A, CAMERA_ROLES.WHEEL_BR_B] },
+      { label: "Top Left Wheel", role: CAMERA_ROLES.WHEEL_TL_A },
+      { label: "Top Right Wheel", role: CAMERA_ROLES.WHEEL_TR_A },
+      { label: "Bottom Left Wheel", role: CAMERA_ROLES.WHEEL_BL_A },
+      { label: "Bottom Right Wheel", role: CAMERA_ROLES.WHEEL_BR_A },
     ];
 
     return (
@@ -310,26 +310,22 @@ export default function OperatorTab({ selectedSubsystem, setSelectedSubsystem })
             {wheelGroups.map((wheel) => (
               <div key={wheel.label} style={{ background: "#2b2b2b", borderRadius: "10px", border: "1px solid #3d3d3d", padding: "4px", display: "flex", flexDirection: "column", minHeight: 0 }}>
                 <div style={{ color: "white", fontSize: "8px", fontWeight: 700, textAlign: "center", marginBottom: "2px" }}>{wheel.label}</div>
-                <div style={{ display: "flex", gap: "3px", flex: 1, minHeight: 0 }}>
-                  {wheel.roles.map((role) => (
-                    <CameraFeed
-                      key={role}
-                      role={role}
-                      label={role}
-                      rotateDeg={cameraRotateDeg}
-                      onClick={() => setFullscreenCam({ label: `${wheel.label} - ${role}`, role })}
-                      style={{ flex: 1, borderRadius: 4, border: "1px solid #3d3d3d", cursor: "pointer" }}
-                    />
-                  ))}
-                </div>
+                <CameraFeed
+                  role={wheel.role}
+                  label={wheel.label}
+                  rotateDeg={cameraRotateDeg}
+                  onClick={() => setFullscreenCam({ label: wheel.label, role: wheel.role })}
+                  style={{ flex: 1, borderRadius: 4, border: "1px solid #3d3d3d", cursor: "pointer" }}
+                />
               </div>
             ))}
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px", minHeight: 0 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "6px", minHeight: 0 }}>
             {[
               { label: "Back Camera", role: CAMERA_ROLES.BACK },
               { label: "Left Side", role: CAMERA_ROLES.LEFT_SIDE },
               { label: "Right Side", role: CAMERA_ROLES.RIGHT_SIDE },
+              { label: "Radio View", role: CAMERA_ROLES.RADIO_VIEW },
             ].map((cam) => (
               <CameraFeed
                 key={cam.role}

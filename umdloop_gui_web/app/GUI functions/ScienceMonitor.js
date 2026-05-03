@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import RamanPlot from "../../spectrometer/RamanPlot";
 import CameraFeed from "./CameraFeed";
+import CameraManagerModal from "./CameraManagerModal";
 import { CAMERA_ROLES, SCIENCE_SUBSYSTEMS } from "./pageConstants";
 import SubsystemBar from "./SubsystemBar";
 
@@ -16,6 +17,7 @@ export default function ScienceMonitor() {
   const [panoramaShots, setPanoramaShots] = useState(0);
   const [sciencePhotos, setSciencePhotos] = useState(0);
   const [sciencePopup, setSciencePopup] = useState(null);
+  const [showCameraManager, setShowCameraManager] = useState(false);
   const [stopwatchRunning, setStopwatchRunning] = useState(false);
   const [stopwatchElapsedMs, setStopwatchElapsedMs] = useState(0);
   const [cameraRotateDeg] = useState(0);
@@ -305,7 +307,29 @@ export default function ScienceMonitor() {
   return (
     <div style={{ minHeight: 0, height: "100%", padding: "10px" }}>
       <div style={{ border: "1px solid #333", borderRadius: "10px", overflow: "hidden", background: "#1f1f1f", height: "100%", display: "flex", flexDirection: "column" }}>
-        <SubsystemBar buttons={SCIENCE_SUBSYSTEMS} selected={selectedScienceTab} setSelected={setSelectedScienceTab} compact />
+        <div style={{ display: "flex", alignItems: "stretch", background: "#2b2b2b", borderBottom: "2px solid #1f1e1eff" }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <SubsystemBar buttons={SCIENCE_SUBSYSTEMS} selected={selectedScienceTab} setSelected={setSelectedScienceTab} compact />
+          </div>
+          <div style={{ display: "flex", alignItems: "center", padding: "8px 12px 8px 0" }}>
+            <button
+              onClick={() => setShowCameraManager(true)}
+              style={{
+                borderRadius: "9999px",
+                border: "2px solid #0f2f55",
+                background: "#1a3f6f",
+                color: "white",
+                cursor: "pointer",
+                padding: "7px 14px",
+                fontSize: "12px",
+                fontWeight: 900,
+                whiteSpace: "nowrap",
+              }}
+            >
+              Camera Manager
+            </button>
+          </div>
+        </div>
         {isEquipmentSpecialistTab || isScientist1Tab1 ? (
           <div style={{ padding: "12px", height: "100%", minHeight: 0, background: "#1a1a1a", overflow: "auto" }}>
             <div style={{ width: "100%", border: "2px solid #3d3d3d", borderRadius: "14px", background: "#202020", padding: "12px", display: "grid", gridTemplateRows: "auto auto minmax(0, 1fr)", gap: "10px", minHeight: "100%" }}>
@@ -560,6 +584,7 @@ export default function ScienceMonitor() {
       </div>
       <FullscreenOverlay />
       <SciencePopupOverlay />
+      {showCameraManager && <CameraManagerModal onClose={() => setShowCameraManager(false)} />}
     </div>
   );
 }
