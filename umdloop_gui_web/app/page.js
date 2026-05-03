@@ -13,6 +13,7 @@ export default function LoopGui() {
   const [selectedNavItem, setSelectedNavItem] = useState(NAVIGATION_BUTTONS[0]);
 
   const showSubsystemBar =
+    selectedMode !== "Science" &&
     selectedMode !== "Navigation" &&
     selectedMode !== "Drone" &&
     selectedMode !== "Technician" &&

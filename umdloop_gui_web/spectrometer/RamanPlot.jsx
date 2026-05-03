@@ -53,6 +53,7 @@ const RamanPlot = ({
   wsUrl = "ws://localhost:5000/ws/spectrum",
   width = 900,
   height = 400,
+  fillContainer = false,
   testMode = false,
 }) => {
   const canvasRef = useRef(null);
@@ -186,7 +187,14 @@ const RamanPlot = ({
   }, [wsUrl, testMode, updatePlotData]);
 
   return (
-    <div style={{ position: "relative", display: "inline-block", fontFamily: "monospace" }}>
+    <div
+      style={{
+        position: "relative",
+        display: fillContainer ? "block" : "inline-block",
+        width: fillContainer ? "100%" : "auto",
+        fontFamily: "monospace",
+      }}
+    >
       <div
         style={{
           display: "flex",
@@ -220,7 +228,7 @@ const RamanPlot = ({
         width={width}
         height={height}
         style={{
-          width,
+          width: fillContainer ? "100%" : width,
           height,
           background: "#0a0a1a",
           display: "block",

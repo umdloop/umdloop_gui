@@ -1,38 +1,365 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import RamanPlot from "../../spectrometer/RamanPlot";
+import React, { useEffect, useRef, useState } from "react";
+import { getCameraSignalingUrl } from "../config";
+import ArmOperatorTab from "./ArmOperatorTab";
+import DriveOperatorTab from "./DriveOperatorTab";
+import useCameraStreams from "./useCameraStreams";
 
-const RAMAN_WS_URL = "ws://localhost:5001/ws/spectrum";
+const MAX_ACTIVE_DRIVE_CAMERAS = 4;
+const DRIVE_CAMERA_TILE_COUNT = 8;
+const DRIVE_SUBSYSTEMS = ["Drive (Default)", "Drive (Science)"];
 
-export default function OperatorTab({ selectedSubsystem, setSelectedSubsystem }) {
+const normalizeCameraId = (camera) => {
+  const id = camera?.id ?? camera;
+  if (id == null) return null;
+  const normalized = String(id).trim();
+  return normalized || null;
+};
+
+const normalizeCameraIds = (cameras) => {
+  if (!Array.isArray(cameras)) return [];
+
+  return [
+    ...new Set(
+      cameras
+        .map((camera) => normalizeCameraId(camera))
+        .filter(Boolean)
+    ),
+  ];
+};
+
+export default function OperatorTab({ selectedSubsystem }) {
+  const isDriveSubsystem = DRIVE_SUBSYSTEMS.includes(selectedSubsystem);
+  const isArmSubsystem = selectedSubsystem === "Arm";
   const [fullscreenCam, setFullscreenCam] = useState(null);
   const [fps, setFps] = useState(24);
   const [streamPlaying, setStreamPlaying] = useState(true);
-  const [forcedFrameCount, setForcedFrameCount] = useState(0);
+  const [streamRefreshToken, setStreamRefreshToken] = useState(0);
+  const [pausedSnapshots, setPausedSnapshots] = useState({});
+  const [isRestartingFeeds, setIsRestartingFeeds] = useState(false);
   const [cameraRotateDeg, setCameraRotateDeg] = useState(0);
   const [emergencyStop, setEmergencyStop] = useState(false);
   const [armClampDistance, setArmClampDistance] = useState(35);
-  const [panoramaShots, setPanoramaShots] = useState(0);
-  const [sciencePhotos, setSciencePhotos] = useState(0);
-  const [lastPanoramaLabel, setLastPanoramaLabel] = useState("No panorama captured yet.");
-  const [sciencePopup, setSciencePopup] = useState(null);
+  const [grayscale, setGrayscale] = useState(false);
+  const [cameraControlStatus, setCameraControlStatus] = useState("");
+  const [cameraLoadState, setCameraLoadState] = useState({});
+  const [availableCameras, setAvailableCameras] = useState([]);
+  const [cameraListLoaded, setCameraListLoaded] = useState(false);
+  const [activeDriveCameraIds, setActiveDriveCameraIds] = useState([]);
+  const cameraImageRefs = useRef({});
+  const restartTimerRef = useRef(null);
+  const cameraSignalUrl = getCameraSignalingUrl();
+
+  const cameraBySlot = (slot) => {
+    if (!cameraListLoaded) return null;
+    return availableCameras[slot] ?? null;
+  };
+  const driveCameraBySlot = (slot) => cameraBySlot(slot);
+  const armCameraIds = [cameraBySlot(4), cameraBySlot(5), cameraBySlot(6), cameraBySlot(7)].filter(Boolean);
+  const requestedCameraIds = [
+    ...new Set(
+      [
+        ...(isDriveSubsystem ? activeDriveCameraIds : []),
+        ...(isArmSubsystem ? armCameraIds : []),
+        fullscreenCam?.id,
+      ].map((id) => normalizeCameraId(id)).filter(Boolean)
+    ),
+  ];
+
+  const {
+    cameraIds: signaledCameraIds,
+    streams: cameraStreams,
+    status: cameraSocketStatus,
+    detail: cameraSocketDetail,
+    lastMessage: cameraLastMessage,
+    stats: cameraStats,
+    debug: cameraDebug,
+  } = useCameraStreams(cameraSignalUrl, {
+    reconnectToken: streamRefreshToken,
+    activeCameraIds: requestedCameraIds,
+  });
+
+  const cameraButtonStyle = (active = false) => ({
+    borderRadius: "6px",
+    border: "1px solid #555",
+    background: active ? "#6d1111" : "#303030",
+    color: "white",
+    cursor: "pointer",
+    fontWeight: 700,
+    fontSize: "11px",
+    padding: "6px 8px",
+  });
+
+  const setGstreamerGrayscale = async (enabled) => {
+    setGrayscale(enabled);
+    setCameraControlStatus(enabled ? "Local grayscale preview on" : "Local grayscale preview off");
+  };
+
+  const snapshotCamera = (cameraId) => {
+    const image = cameraImageRefs.current[cameraId];
+    const width = image?.videoWidth || image?.naturalWidth;
+    const height = image?.videoHeight || image?.naturalHeight;
+    if (!image || !width || !height) return null;
+
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d");
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL("image/jpeg", 0.86);
+    } catch (_) {
+      return null;
+    }
+  };
+
+  const captureVisibleSnapshots = () => {
+    const nextSnapshots = {};
+    Object.keys(cameraImageRefs.current).forEach((cameraId) => {
+      const snapshot = snapshotCamera(cameraId);
+      if (snapshot) nextSnapshots[cameraId] = snapshot;
+    });
+    setPausedSnapshots(nextSnapshots);
+    return Object.keys(nextSnapshots).length;
+  };
+
+  const setAllCameraFramerate = (nextFps) => {
+    setFps(nextFps);
+    setCameraControlStatus(`All cameras target ${nextFps} FPS`);
+  };
+
+  const toggleDriveCamera = (cameraId) => {
+    const normalizedCameraId = normalizeCameraId(cameraId);
+    if (!normalizedCameraId) {
+      setCameraControlStatus("No camera ID available yet from backend");
+      return;
+    }
+
+    setActiveDriveCameraIds((current) => {
+      if (current.includes(normalizedCameraId)) {
+        setCameraControlStatus(`Camera ${normalizedCameraId} deactivated`);
+        return current.filter((id) => id !== normalizedCameraId);
+      }
+
+      if (current.length >= MAX_ACTIVE_DRIVE_CAMERAS) {
+        setCameraControlStatus(`Max ${MAX_ACTIVE_DRIVE_CAMERAS} camera streams active. Clear feeds before loading more.`);
+        return current;
+      }
+
+      setCameraControlStatus(`Camera ${normalizedCameraId} activated`);
+      return [...current, normalizedCameraId];
+    });
+  };
+
+  const toggleStreamPlaying = () => {
+    if (streamPlaying) {
+      const snapshotCount = captureVisibleSnapshots();
+      setStreamPlaying(false);
+      setCameraControlStatus(snapshotCount ? "Feeds paused on last frame" : "Feeds paused");
+      return;
+    }
+
+    setStreamPlaying(true);
+    setPausedSnapshots({});
+    setCameraControlStatus("Camera feeds playing");
+  };
+
+  const restartAllFeeds = () => {
+    if (restartTimerRef.current) {
+      clearTimeout(restartTimerRef.current);
+    }
+
+    setIsRestartingFeeds(true);
+    setStreamPlaying(false);
+    setPausedSnapshots({});
+    setCameraLoadState({});
+    setCameraControlStatus("Restarting camera feeds...");
+
+    restartTimerRef.current = window.setTimeout(() => {
+      setStreamRefreshToken((token) => token + 1);
+      setStreamPlaying(true);
+      setIsRestartingFeeds(false);
+      setCameraControlStatus("Camera feeds reconnected");
+    }, 300);
+  };
 
   useEffect(() => {
     const handleKey = (e) => {
       if (e.key === "Escape") {
         setFullscreenCam(null);
-        setSciencePopup(null);
       }
     };
 
     window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
+    return () => {
+      window.removeEventListener("keydown", handleKey);
+      if (restartTimerRef.current) {
+        clearTimeout(restartTimerRef.current);
+      }
+    };
   }, []);
 
-  const CameraCard = ({ camera }) => (
+  useEffect(() => {
+    if (cameraSocketStatus === "connected") {
+      const nextCameraIds = normalizeCameraIds(signaledCameraIds);
+      setAvailableCameras(nextCameraIds);
+      setCameraListLoaded(nextCameraIds.length > 0);
+      return;
+    }
+
+    if (cameraSocketStatus === "error" || cameraSocketStatus === "disconnected") {
+      setAvailableCameras([]);
+      setCameraListLoaded(false);
+    }
+  }, [cameraSocketStatus, signaledCameraIds]);
+
+  useEffect(() => {
+    if (!cameraListLoaded) {
+      setActiveDriveCameraIds([]);
+      return;
+    }
+
+    setActiveDriveCameraIds((current) => {
+      const stillAvailable = current.filter((id) => availableCameras.includes(id));
+      return stillAvailable.length || !availableCameras.length ? stillAvailable : [availableCameras[0]];
+    });
+  }, [availableCameras, cameraListLoaded]);
+
+  const CameraImage = ({ cameraId, alt, style, pausedStyle, pausedText = "Feed Paused", enabled = true, inactiveText, ...imageProps }) => {
+    const normalizedCameraId = normalizeCameraId(cameraId);
+    const frozenFrame = pausedSnapshots[cameraId];
+    const frameStyle = {
+      ...style,
+      position: style?.position ?? "relative",
+      overflow: style?.overflow ?? "hidden",
+      display: style?.display ?? "block",
+    };
+    const mediaStyle = {
+      position: "absolute",
+      inset: 0,
+      width: "100%",
+      height: "100%",
+      objectFit: style?.objectFit,
+      borderRadius: style?.borderRadius,
+      background: style?.background,
+      transform: style?.transform,
+      transformOrigin: style?.transformOrigin,
+      cursor: style?.cursor,
+      border: style?.border,
+      filter: grayscale ? "grayscale(1)" : "none",
+    };
+    const overlayStyle = {
+      position: "absolute",
+      inset: 0,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      textAlign: "center",
+      padding: "8px",
+      borderRadius: style?.borderRadius,
+      background: style?.background,
+      transform: style?.transform,
+      transformOrigin: style?.transformOrigin,
+      cursor: style?.cursor,
+      border: style?.border,
+      ...pausedStyle,
+    };
+
+    if (!enabled || !normalizedCameraId) {
+      return (
+        <div style={frameStyle} {...imageProps}>
+          <div style={{ ...overlayStyle, color: "#777", fontWeight: 800 }}>
+            {normalizedCameraId ? inactiveText || `Click to load camera ${normalizedCameraId}` : "No camera assigned"}
+          </div>
+        </div>
+      );
+    }
+
+    const stream = cameraStreams[normalizedCameraId];
+
+    if (!streamPlaying) {
+      if (frozenFrame) {
+        return (
+          <div style={frameStyle} {...imageProps}>
+            <img src={frozenFrame} alt={alt} style={mediaStyle} />
+          </div>
+        );
+      }
+
+      return (
+        <div style={frameStyle} {...imageProps}>
+          <div style={{ ...overlayStyle, color: "#bbb", fontWeight: 800 }}>
+            {isRestartingFeeds ? "Restarting..." : pausedText}
+          </div>
+        </div>
+      );
+    }
+
+    if (!stream) {
+      return (
+        <div style={frameStyle} {...imageProps}>
+          <div style={{ ...overlayStyle, color: "#bbb", fontWeight: 800 }}>
+            {cameraSocketStatus === "connected" ? "Waiting for WebRTC stream..." : "Connecting to camera backend..."}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div style={frameStyle} {...imageProps}>
+        <video
+          key={`${cameraId}-${streamRefreshToken}`}
+          ref={(node) => {
+            if (!node) return;
+            cameraImageRefs.current[normalizedCameraId] = node;
+            if (node.srcObject !== stream) {
+              node.srcObject = stream;
+            }
+          }}
+          autoPlay
+          muted
+          playsInline
+          style={mediaStyle}
+          onLoadedData={(e) => {
+            setCameraLoadState((current) => {
+              if (current[normalizedCameraId] === "loaded") return current;
+              return { ...current, [normalizedCameraId]: "loaded" };
+            });
+            imageProps.onLoadedData?.(e);
+          }}
+          onError={(e) => {
+            setCameraLoadState((current) => {
+              const nextState = "error: stream";
+              if (current[normalizedCameraId] === nextState) return current;
+              return { ...current, [normalizedCameraId]: nextState };
+            });
+            imageProps.onError?.(e);
+          }}
+        />
+      </div>
+    );
+  };
+
+  const summarizeCameraLoadState = (cameraIds) => {
+    const uniqueCameraIds = [...new Set(cameraIds)];
+    const loaded = uniqueCameraIds.filter((id) => cameraLoadState[id] === "loaded");
+    const failed = uniqueCameraIds.filter((id) => cameraLoadState[id]?.startsWith("error"));
+    const waiting = uniqueCameraIds.filter((id) => !cameraLoadState[id]);
+
+    return `loaded ${loaded.join(", ") || "none"} | failed ${failed.join(", ") || "none"} | waiting ${waiting.join(", ") || "none"}`;
+  };
+
+  const CameraCard = ({ camera, enabled = true, onInactiveClick }) => (
     <div
-      onClick={() => setFullscreenCam(camera)}
+      onClick={() => {
+        if (enabled) {
+          setFullscreenCam(camera);
+          return;
+        }
+
+        onInactiveClick?.();
+      }}
       style={{
         background: "#2b2b2b",
         borderRadius: "10px",
@@ -52,10 +379,11 @@ export default function OperatorTab({ selectedSubsystem, setSelectedSubsystem })
       }}
     >
       <h4 style={{ color: "white", fontSize: "10px", fontWeight: "bold", textAlign: "center", marginBottom: "3px" }}>
-        {camera.label}
+        {camera.label} {camera.id ? `(${camera.id})` : "(No Cam)"}
       </h4>
-      <img
-        src={`http://localhost:5000/camera/${camera.id}`}
+      <CameraImage
+        cameraId={camera.id}
+        enabled={enabled}
         alt={camera.label}
         style={{
           width: "100%",
@@ -67,6 +395,7 @@ export default function OperatorTab({ selectedSubsystem, setSelectedSubsystem })
           transform: `rotate(${cameraRotateDeg}deg)`,
           transformOrigin: "center center",
         }}
+        pausedStyle={{ fontSize: "12px" }}
       />
     </div>
   );
@@ -91,8 +420,8 @@ export default function OperatorTab({ selectedSubsystem, setSelectedSubsystem })
         }}
       >
         <h2 style={{ color: "white", fontSize: "22px", fontWeight: "bold", marginBottom: "12px" }}>{fullscreenCam.label}</h2>
-        <img
-          src={`http://localhost:5000/camera/${fullscreenCam.id}`}
+        <CameraImage
+          cameraId={fullscreenCam.id}
           alt={fullscreenCam.label}
           style={{
             maxWidth: "100%",
@@ -103,308 +432,60 @@ export default function OperatorTab({ selectedSubsystem, setSelectedSubsystem })
             transform: `rotate(${cameraRotateDeg}deg)`,
             transformOrigin: "center center",
           }}
+          pausedStyle={{ width: "min(900px, 90vw)", height: "60vh", fontSize: "18px" }}
         />
       </div>
     );
 
-  const SciencePopupOverlay = () => {
-    if (!sciencePopup) return null;
-
-    let title = "";
-    let body = null;
-
-    if (sciencePopup === "panorama") {
-      title = "Panorama Preview";
-      body = (
-        <div style={{ display: "grid", gap: "10px" }}>
-          <img
-            src="http://localhost:5000/camera/12"
-            alt="Latest panorama preview"
-            style={{ width: "100%", maxHeight: "50vh", objectFit: "cover", borderRadius: "10px", border: "1px solid #444", background: "#111" }}
-          />
-          <div style={{ color: "#d8d8d8", fontSize: "13px" }}>{lastPanoramaLabel}</div>
-          <div style={{ color: "#a9a9a9", fontSize: "12px" }}>Placeholder preview panel. Stitching/export will be wired later.</div>
-        </div>
-      );
-    } else if (sciencePopup === "tasks") {
-      title = "Additional Science Tasks";
-      const taskItems = [
-        "Soil Core Collection",
-        "Rock Face Classification",
-        "Sample Bag Labeling",
-        "Drill Site Annotation",
-        "Spectrometer Calibration",
-      ];
-      body = (
-        <div style={{ display: "grid", gap: "8px" }}>
-          {taskItems.map((task) => (
-            <button
-              key={task}
-              style={{ textAlign: "left", borderRadius: "8px", border: "1px solid #555", background: "#2d2d2d", color: "white", padding: "10px 12px", cursor: "pointer", fontWeight: 700 }}
-            >
-              {task}
-            </button>
-          ))}
-          <div style={{ color: "#a9a9a9", fontSize: "12px" }}>Task actions are UI placeholders for now.</div>
-        </div>
-      );
-    } else if (sciencePopup === "soil") {
-      title = "Soil Moisture Analysis";
-      const points = [28, 34, 41, 39, 44, 48, 52];
-      body = (
-        <div style={{ display: "grid", gap: "8px" }}>
-          <div style={{ color: "#d8d8d8", fontSize: "13px" }}>Probe trend over last 7 reads</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "6px", alignItems: "end", height: "150px", background: "#171717", border: "1px solid #444", borderRadius: "8px", padding: "10px" }}>
-            {points.map((p, i) => (
-              <div key={`soil-${i}`} style={{ height: `${p * 2}px`, background: "#16a34a", borderRadius: "4px 4px 0 0" }} title={`T${i + 1}: ${p}%`} />
-            ))}
-          </div>
-          <div style={{ color: "#a9a9a9", fontSize: "12px" }}>Graph is a placeholder UI panel.</div>
-        </div>
-      );
-    } else if (sciencePopup === "spectral") {
-      title = "Raman Spectrum Analysis";
-      body = (
-        <div style={{ display: "grid", gap: "8px" }}>
-          <div style={{ color: "#d8d8d8", fontSize: "13px" }}>
-            Live Raman spectrum from spectrometer backend on port 5001
-          </div>
-          <RamanPlot wsUrl={RAMAN_WS_URL} width={700} height={400} />
-          <div style={{ color: "#a9a9a9", fontSize: "12px" }}>
-            Start with: <code>python3 spectrometer/raman_backend.py</code>
-          </div>
-        </div>
-      );
-    }
-
+  if (isDriveSubsystem) {
     return (
-      <div
-        onClick={() => setSciencePopup(null)}
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: "rgba(0, 0, 0, 0.75)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 1100,
-          padding: "20px",
-        }}
-      >
-        <div
-          onClick={(e) => e.stopPropagation()}
-          style={{ width: "min(760px, 96vw)", maxHeight: "85vh", overflowY: "auto", background: "#222", border: "1px solid #4a4a4a", borderRadius: "12px", padding: "14px" }}
-        >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-            <div style={{ color: "white", fontWeight: 900, fontSize: "20px" }}>{title}</div>
-            <button onClick={() => setSciencePopup(null)} style={{ borderRadius: "8px", border: "1px solid #666", background: "#333", color: "white", cursor: "pointer", padding: "6px 10px", fontWeight: 800 }}>Close</button>
-          </div>
-          {body}
-        </div>
-      </div>
-    );
-  };
-
-  if (selectedSubsystem === "Drive") {
-    const frontCamera = { label: "Front Camera", id: 15 };
-    const backCamera = { label: "Back Camera", id: 16 };
-    const sideViews = [
-      { label: "Left Side", id: 17 },
-      { label: "Right Side", id: 18 },
-    ];
-    const wheelCameras = [
-      { label: "Top Left Wheel", cams: [0, 1] },
-      { label: "Top Right Wheel", cams: [2, 3] },
-      { label: "Bottom Left Wheel", cams: [4, 5] },
-      { label: "Bottom Right Wheel", cams: [6, 7] },
-    ];
-
-    return (
-      <div style={{ display: "grid", gridTemplateRows: "auto auto minmax(0, 1fr)", gap: "8px", padding: "8px", minHeight: 0, height: "100%", background: "#1a1a1a" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-          <div style={{ background: "#232323", border: "1px solid #3d3d3d", borderRadius: "10px", padding: "8px" }}>
-            <div style={{ fontSize: "11px", color: "#ddd", marginBottom: "6px", fontWeight: 800 }}>Control State + Safety</div>
-            <button
-              onClick={() => setEmergencyStop((prev) => !prev)}
-              style={{ width: "100%", borderRadius: "8px", border: "1px solid #803737", padding: "7px", cursor: "pointer", background: emergencyStop ? "#a31616" : "#3a3a3a", color: "white", fontWeight: 900 }}
-            >
-              {emergencyStop ? "EMERGENCY STOP ACTIVE" : "Emergency Stop"}
-            </button>
-          </div>
-
-          <div style={{ background: "#232323", border: "1px solid #3d3d3d", borderRadius: "10px", padding: "8px" }}>
-            <div style={{ fontSize: "11px", color: "#ddd", marginBottom: "6px", fontWeight: 800 }}>Vision + Stream Control</div>
-            <div style={{ display: "grid", gridTemplateColumns: "auto auto auto 1fr", gap: "6px", alignItems: "center" }}>
-              <button onClick={() => setFps((p) => Math.max(1, p - 1))} style={{ borderRadius: "6px", border: "1px solid #555", background: "#303030", color: "white", cursor: "pointer" }}>-</button>
-              <div style={{ fontSize: "12px", color: "white", textAlign: "center" }}>{fps} FPS</div>
-              <button onClick={() => setFps((p) => Math.min(60, p + 1))} style={{ borderRadius: "6px", border: "1px solid #555", background: "#303030", color: "white", cursor: "pointer" }}>+</button>
-              <button onClick={() => setForcedFrameCount((n) => n + 1)} style={{ borderRadius: "6px", border: "1px solid #555", background: "#303030", color: "white", cursor: "pointer", fontSize: "11px" }}>Force Frame</button>
-            </div>
-            <div style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
-              <button onClick={() => setStreamPlaying(true)} style={{ flex: 1, borderRadius: "6px", border: "1px solid #555", background: streamPlaying ? "#1f7a1f" : "#303030", color: "white", cursor: "pointer", fontWeight: 700 }}>Play</button>
-              <button onClick={() => setStreamPlaying(false)} style={{ flex: 1, borderRadius: "6px", border: "1px solid #555", background: !streamPlaying ? "#7a1f1f" : "#303030", color: "white", cursor: "pointer", fontWeight: 700 }}>Stop</button>
-            </div>
-            <div style={{ fontSize: "11px", color: "#bbb", marginTop: "5px" }}>Forced frames: {forcedFrameCount}</div>
-          </div>
-        </div>
-
-        <div style={{ background: "#232323", border: "1px solid #3d3d3d", borderRadius: "10px", padding: "8px 12px", display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
-          <span style={{ fontSize: "11px", color: "#ddd", fontWeight: 800 }}>Rotate:</span>
-          <button onClick={() => setCameraRotateDeg((d) => (d - 90 + 360) % 360)} style={{ borderRadius: "6px", border: "1px solid #555", background: "#303030", color: "white", cursor: "pointer", padding: "4px 10px", fontSize: "11px" }}>-90°</button>
-          <button onClick={() => setCameraRotateDeg((d) => (d + 90) % 360)} style={{ borderRadius: "6px", border: "1px solid #555", background: "#303030", color: "white", cursor: "pointer", padding: "4px 10px", fontSize: "11px" }}>+90°</button>
-          <button onClick={() => setCameraRotateDeg(0)} style={{ borderRadius: "6px", border: "1px solid #555", background: "#303030", color: "white", cursor: "pointer", padding: "4px 10px", fontSize: "11px" }}>Reset</button>
-          <div style={{ width: "1px", height: "18px", background: "#4a4a4a" }} />
-          <span style={{ fontSize: "11px", color: "#ddd", fontWeight: 800 }}>View:</span>
-          <button onClick={() => setSelectedSubsystem?.("Drive")} style={{ borderRadius: "6px", border: "1px solid #555", background: selectedSubsystem === "Drive" ? "#7c1919" : "#303030", color: "white", cursor: "pointer", padding: "4px 10px", fontSize: "11px" }}>Drive</button>
-          <button onClick={() => setSelectedSubsystem?.("Arm")} style={{ borderRadius: "6px", border: "1px solid #555", background: "#303030", color: "white", cursor: "pointer", padding: "4px 10px", fontSize: "11px" }}>Arm</button>
-          <button onClick={() => setSelectedSubsystem?.("Science")} style={{ borderRadius: "6px", border: "1px solid #555", background: "#303030", color: "white", cursor: "pointer", padding: "4px 10px", fontSize: "11px" }}>Science</button>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateRows: "minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr)", gap: "6px", minHeight: 0, height: "100%" }}>
-          <CameraCard camera={frontCamera} />
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "1fr 1fr", gap: "6px", minHeight: 0 }}>
-            {wheelCameras.map((wheel) => (
-              <div key={wheel.label} style={{ background: "#2b2b2b", borderRadius: "10px", border: "1px solid #3d3d3d", padding: "4px", display: "flex", flexDirection: "column", minHeight: 0 }}>
-                <div style={{ color: "white", fontSize: "8px", fontWeight: 700, textAlign: "center", marginBottom: "2px" }}>{wheel.label}</div>
-                <div style={{ display: "flex", gap: "3px", flex: 1, minHeight: 0 }}>
-                  {wheel.cams.map((camId) => (
-                    <img
-                      key={camId}
-                      src={`http://localhost:5000/camera/${camId}`}
-                      alt={`Camera ${camId}`}
-                      onClick={() => setFullscreenCam({ label: `${wheel.label} - Cam ${camId}`, id: camId })}
-                      style={{ flex: 1, objectFit: "cover", borderRadius: "4px", background: "black", cursor: "pointer", border: "1px solid #3d3d3d" }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.borderColor = "#c90202";
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.borderColor = "#3d3d3d";
-                      }}
-                    />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px", minHeight: 0 }}>
-            <CameraCard camera={backCamera} />
-            {sideViews.map((side) => <CameraCard key={side.label} camera={side} />)}
-          </div>
-        </div>
-        <FullscreenOverlay />
-      </div>
+      <DriveOperatorTab
+        activeDriveCameraIds={activeDriveCameraIds}
+        cameraButtonStyle={cameraButtonStyle}
+        cameraControlStatus={cameraControlStatus}
+        cameraDebug={cameraDebug}
+        cameraLastMessage={cameraLastMessage}
+        cameraRotateDeg={cameraRotateDeg}
+        cameraSignalUrl={cameraSignalUrl}
+        cameraSocketDetail={cameraSocketDetail}
+        cameraSocketStatus={cameraSocketStatus}
+        cameraStats={cameraStats}
+        CameraCard={CameraCard}
+        driveCameraBySlot={driveCameraBySlot}
+        fps={fps}
+        FullscreenOverlay={FullscreenOverlay}
+        grayscale={grayscale}
+        isRestartingFeeds={isRestartingFeeds}
+        MAX_ACTIVE_DRIVE_CAMERAS={MAX_ACTIVE_DRIVE_CAMERAS}
+        setActiveDriveCameraIds={setActiveDriveCameraIds}
+        setCameraControlStatus={setCameraControlStatus}
+        setCameraRotateDeg={setCameraRotateDeg}
+        selectedSubsystem={selectedSubsystem}
+        setEmergencyStop={setEmergencyStop}
+        setGstreamerGrayscale={setGstreamerGrayscale}
+        setAllCameraFramerate={setAllCameraFramerate}
+        streamPlaying={streamPlaying}
+        summarizeCameraLoadState={summarizeCameraLoadState}
+        toggleDriveCamera={toggleDriveCamera}
+        toggleStreamPlaying={toggleStreamPlaying}
+        restartAllFeeds={restartAllFeeds}
+        emergencyStop={emergencyStop}
+        DRIVE_CAMERA_TILE_COUNT={DRIVE_CAMERA_TILE_COUNT}
+      />
     );
   }
 
-  if (selectedSubsystem === "Arm") {
-    const armCameras = [
-      { label: "Base Arm", id: 8 },
-      { label: "Joint", id: 9 },
-      { label: "End Effector", id: 10 },
-      { label: "Gripper", id: 11 },
-    ];
-
+  if (isArmSubsystem) {
     return (
-      <div style={{ display: "grid", gridTemplateRows: "auto minmax(0, 1fr)", gap: "8px", padding: "8px", height: "100%", minHeight: 0, background: "#1a1a1a" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-          <div style={{ background: "#232323", border: "1px solid #3d3d3d", borderRadius: "10px", padding: "8px" }}>
-            <div style={{ fontSize: "11px", color: "#ddd", marginBottom: "6px", fontWeight: 800 }}>Arm Safety</div>
-            <div style={{ fontSize: "12px", color: "#e8e8e8" }}>Emergency Stop: <b>{emergencyStop ? "ON" : "OFF"}</b></div>
-            <button
-              onClick={() => setEmergencyStop((prev) => !prev)}
-              style={{ marginTop: "8px", width: "100%", borderRadius: "8px", border: "1px solid #803737", padding: "8px 10px", cursor: "pointer", background: emergencyStop ? "#a31616" : "#3a3a3a", color: "white", fontWeight: 900 }}
-            >
-              {emergencyStop ? "E-STOP ON" : "Emergency Stop"}
-            </button>
-          </div>
-          <div style={{ background: "#232323", border: "1px solid #3d3d3d", borderRadius: "10px", padding: "8px", display: "flex", flexDirection: "column", gap: "8px" }}>
-            <div>
-              <div style={{ fontSize: "11px", color: "#ddd", marginBottom: "4px", fontWeight: 800 }}>Clamp Distance to Fully Close</div>
-              <input type="range" min={0} max={100} value={armClampDistance} onChange={(e) => setArmClampDistance(Number(e.target.value))} style={{ width: "100%" }} />
-              <div style={{ color: "white", fontSize: "12px" }}>{armClampDistance}%</div>
-            </div>
-          </div>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "1fr 1fr", gap: "6px", minHeight: 0 }}>
-          {armCameras.map((cam) => <CameraCard key={cam.label} camera={cam} />)}
-        </div>
-        <FullscreenOverlay />
-      </div>
-    );
-  }
-
-  if (selectedSubsystem === "Science") {
-    const scienceCameras = [
-      { label: "Science Cam 1", id: 12 },
-      { label: "Science Cam 2", id: 13 },
-      { label: "Science Cam 3", id: 14 },
-    ];
-
-    const graphBar = (value, color) => (
-      <div style={{ height: "8px", background: "#252525", borderRadius: "999px", overflow: "hidden" }}>
-        <div style={{ width: `${value}%`, height: "100%", background: color }} />
-      </div>
-    );
-
-    return (
-      <div style={{ display: "grid", gridTemplateRows: "auto minmax(0, 1fr)", gap: "8px", padding: "8px", height: "100%", minHeight: 0, background: "#1a1a1a" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-          <div style={{ background: "#232323", border: "1px solid #3d3d3d", borderRadius: "10px", padding: "8px" }}>
-            <div style={{ fontSize: "11px", color: "#ddd", marginBottom: "6px", fontWeight: 800 }}>Science Imaging / Capture</div>
-            <div style={{ display: "flex", gap: "6px" }}>
-              <button
-                onClick={() => setPanoramaShots((n) => {
-                  const next = n + 1;
-                  setLastPanoramaLabel(`Panorama #${next} captured at ${new Date().toLocaleTimeString()}`);
-                  return next;
-                })}
-                style={{ flex: 1, borderRadius: "6px", border: "1px solid #555", background: "#303030", color: "white", cursor: "pointer", fontWeight: 700 }}
-              >
-                Panorama
-              </button>
-              <button onClick={() => setSciencePhotos((n) => n + 1)} style={{ flex: 1, borderRadius: "6px", border: "1px solid #555", background: "#303030", color: "white", cursor: "pointer", fontWeight: 700 }}>Take Picture</button>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", marginTop: "6px" }}>
-              <button onClick={() => setSciencePopup("panorama")} style={{ borderRadius: "6px", border: "1px solid #555", background: "#2f2f2f", color: "white", cursor: "pointer", fontWeight: 700 }}>
-                Open Panorama Popup
-              </button>
-              <button onClick={() => setSciencePopup("tasks")} style={{ borderRadius: "6px", border: "1px solid #555", background: "#2f2f2f", color: "white", cursor: "pointer", fontWeight: 700 }}>
-                Additional Science Tasks
-              </button>
-            </div>
-            <div style={{ marginTop: "6px", color: "#ddd", fontSize: "11px" }}>
-              Panoramas: {panoramaShots} | Photos: {sciencePhotos}
-            </div>
-          </div>
-          <div style={{ background: "#232323", border: "1px solid #3d3d3d", borderRadius: "10px", padding: "8px" }}>
-            <div style={{ fontSize: "11px", color: "#ddd", marginBottom: "6px", fontWeight: 800 }}>Science Data Graphs</div>
-            <div style={{ display: "grid", gap: "6px" }}>
-              <button onClick={() => setSciencePopup("soil")} style={{ textAlign: "left", borderRadius: "6px", border: "1px solid #4d4d4d", background: "#2d2d2d", color: "#cfcfcf", fontSize: "10px", padding: "6px", cursor: "pointer" }}>
-                Soil Moisture (Open Popup)
-                <div style={{ marginTop: "5px" }}>{graphBar(72, "#16a34a")}</div>
-              </button>
-              <button onClick={() => setSciencePopup("spectral")} style={{ textAlign: "left", borderRadius: "6px", border: "1px solid #4d4d4d", background: "#2d2d2d", color: "#cfcfcf", fontSize: "10px", padding: "6px", cursor: "pointer" }}>
-                Spectral Intensity (Open Popup)
-                <div style={{ marginTop: "5px" }}>{graphBar(48, "#2563eb")}</div>
-              </button>
-              <div style={{ fontSize: "10px", color: "#cfcfcf" }}>Thermal Delta</div>
-              {graphBar(35, "#f97316")}
-            </div>
-          </div>
-        </div>
-        <div style={{ display: "grid", gridTemplateRows: "minmax(0, 1fr) minmax(0, 1fr)", gap: "6px", minHeight: 0 }}>
-          <CameraCard camera={scienceCameras[0]} />
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", minHeight: 0 }}>
-            <CameraCard camera={scienceCameras[1]} />
-            <CameraCard camera={scienceCameras[2]} />
-          </div>
-        </div>
-        <FullscreenOverlay />
-        <SciencePopupOverlay />
-      </div>
+      <ArmOperatorTab
+        armClampDistance={armClampDistance}
+        cameraBySlot={cameraBySlot}
+        CameraCard={CameraCard}
+        emergencyStop={emergencyStop}
+        FullscreenOverlay={FullscreenOverlay}
+        setArmClampDistance={setArmClampDistance}
+        setEmergencyStop={setEmergencyStop}
+      />
     );
   }
 

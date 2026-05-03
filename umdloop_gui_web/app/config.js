@@ -6,6 +6,9 @@
  *   NEXT_PUBLIC_ROSBRIDGE_WS_URL - WebSocket URL for Rosbridge on the rover (default: ws://localhost:9090).
  *                                  In the field, set to e.g. ws://192.168.1.100:9090 (rover's IP on radio network).
  *   NEXT_PUBLIC_GUI_API_URL      - Base URL for the local Flask API (default: http://127.0.0.1:5000).
+ *   NEXT_PUBLIC_CAMERA_STREAM_URL - Base URL for the legacy HTTP MJPEG camera server (default: http://192.168.88.10:7000).
+ *   NEXT_PUBLIC_CAMERA_SIGNALING_WS_URL - WebSocket URL for Jetson camera signaling/WebRTC control
+ *                                         (default: ws://192.168.88.90:8081).
  *   NEXT_PUBLIC_USE_LOCAL_TILES  - Set to "true" to use offline tiles from public/tiles/ instead of MapTiler CDN.
  *                                  Run `python3 scripts/download_tiles.py` first to populate the tiles.
  */
@@ -26,6 +29,28 @@ export function getApiBaseUrl() {
     return window.__GUI_API_URL__ ?? "http://127.0.0.1:5000";
   }
   return process.env.NEXT_PUBLIC_GUI_API_URL || "http://127.0.0.1:5000";
+}
+
+export function getCameraStreamBaseUrl() {
+  if (typeof window !== "undefined") {
+    return window.__CAMERA_STREAM_URL__ ?? "http://192.168.88.10:7000";
+  }
+  return process.env.NEXT_PUBLIC_CAMERA_STREAM_URL || "http://192.168.88.10:7000";
+}
+
+export function getCameraSignalingUrl() {
+  if (typeof window !== "undefined") {
+    return window.__CAMERA_SIGNALING_WS_URL__ ?? "ws://192.168.88.90:8081";
+  }
+  return process.env.NEXT_PUBLIC_CAMERA_SIGNALING_WS_URL || "ws://192.168.88.90:8081";
+}
+
+export function getCameraStreamUrl(cameraId) {
+  return `${getCameraStreamBaseUrl().replace(/\/$/, "")}/camera/${cameraId}`;
+}
+
+export function getCameraListUrl() {
+  return `${getCameraStreamBaseUrl().replace(/\/$/, "")}/cameras`;
 }
 
 
