@@ -2,31 +2,12 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import RamanPlot from "../../spectrometer/RamanPlot";
-import { getCameraSignalingUrl } from "../config";
-import { SCIENCE_SUBSYSTEMS } from "./pageConstants";
+import CameraFeed from "./CameraFeed";
+import { CAMERA_ROLES, SCIENCE_SUBSYSTEMS } from "./pageConstants";
 import SubsystemBar from "./SubsystemBar";
-import useCameraStreams from "./useCameraStreams";
 
 const RAMAN_WS_URL = "ws://localhost:5001/ws/spectrum";
-
-const normalizeCameraId = (camera) => {
-  const id = camera?.id ?? camera;
-  if (id == null) return null;
-  const normalized = String(id).trim();
-  return normalized || null;
-};
-
-const normalizeCameraIds = (cameras) => {
-  if (!Array.isArray(cameras)) return [];
-
-  return [
-    ...new Set(
-      cameras
-        .map((camera) => normalizeCameraId(camera))
-        .filter(Boolean)
-    ),
-  ];
-};
+const SCIENCE_CAMERA_ROLES = [CAMERA_ROLES.SCIENCE_1, CAMERA_ROLES.SCIENCE_2, CAMERA_ROLES.SCIENCE_3];
 
 export default function ScienceMonitor() {
   const [selectedScienceTab, setSelectedScienceTab] = useState(SCIENCE_SUBSYSTEMS[0]);
@@ -37,13 +18,7 @@ export default function ScienceMonitor() {
   const [sciencePopup, setSciencePopup] = useState(null);
   const [stopwatchRunning, setStopwatchRunning] = useState(false);
   const [stopwatchElapsedMs, setStopwatchElapsedMs] = useState(0);
-  const [availableCameras, setAvailableCameras] = useState([]);
-  const [cameraListLoaded, setCameraListLoaded] = useState(false);
   const [cameraRotateDeg] = useState(0);
-  const [cameraLoadState, setCameraLoadState] = useState({});
-  const [streamRefreshToken] = useState(0);
-  const cameraImageRefs = useRef({});
-  const cameraSignalUrl = getCameraSignalingUrl();
   const stopwatchStartRef = useRef(null);
   const isEquipmentSpecialistTab = selectedScienceTab.startsWith("Equipment Specialist");
   const isScientist1Tab1 = selectedScienceTab === "Scientist 1 Tab 1";
@@ -51,24 +26,9 @@ export default function ScienceMonitor() {
   const isScientist2Tab2 = selectedScienceTab === "Scientist 2 Tab 2";
 
   const cameraBySlot = (slot) => {
-    if (!cameraListLoaded) return null;
-    return availableCameras[slot] ?? null;
+    if (slot >= 7 && slot <= 9) return SCIENCE_CAMERA_ROLES[slot - 7];
+    return SCIENCE_CAMERA_ROLES[slot % SCIENCE_CAMERA_ROLES.length];
   };
-  const scienceCameraIds = [cameraBySlot(7), cameraBySlot(8), cameraBySlot(9)].filter(Boolean);
-  const requestedCameraIds = [
-    ...new Set(
-      [...scienceCameraIds, fullscreenCam?.id].map((id) => normalizeCameraId(id)).filter(Boolean)
-    ),
-  ];
-
-  const {
-    cameraIds: signaledCameraIds,
-    streams: cameraStreams,
-    status: cameraSocketStatus,
-  } = useCameraStreams(cameraSignalUrl, {
-    reconnectToken: streamRefreshToken,
-    activeCameraIds: requestedCameraIds,
-  });
 
   useEffect(() => {
     const handleKey = (e) => {
@@ -85,20 +45,6 @@ export default function ScienceMonitor() {
   }, []);
 
   useEffect(() => {
-    if (cameraSocketStatus === "connected") {
-      const nextCameraIds = normalizeCameraIds(signaledCameraIds);
-      setAvailableCameras(nextCameraIds);
-      setCameraListLoaded(nextCameraIds.length > 0);
-      return;
-    }
-
-    if (cameraSocketStatus === "error" || cameraSocketStatus === "disconnected") {
-      setAvailableCameras([]);
-      setCameraListLoaded(false);
-    }
-  }, [cameraSocketStatus, signaledCameraIds]);
-
-  useEffect(() => {
     if (!stopwatchRunning) return undefined;
 
     const intervalId = window.setInterval(() => {
@@ -109,96 +55,15 @@ export default function ScienceMonitor() {
     return () => window.clearInterval(intervalId);
   }, [stopwatchRunning]);
 
-  const CameraImage = ({ cameraId, alt, style, pausedStyle, ...imageProps }) => {
-    const normalizedCameraId = normalizeCameraId(cameraId);
-    const frameStyle = {
-      ...style,
-      position: style?.position ?? "relative",
-      overflow: style?.overflow ?? "hidden",
-      display: style?.display ?? "block",
-    };
-    const mediaStyle = {
-      position: "absolute",
-      inset: 0,
-      width: "100%",
-      height: "100%",
-      objectFit: style?.objectFit,
-      borderRadius: style?.borderRadius,
-      background: style?.background,
-      transform: style?.transform,
-      transformOrigin: style?.transformOrigin,
-      cursor: style?.cursor,
-      border: style?.border,
-    };
-    const overlayStyle = {
-      position: "absolute",
-      inset: 0,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      textAlign: "center",
-      padding: "8px",
-      borderRadius: style?.borderRadius,
-      background: style?.background,
-      ...pausedStyle,
-    };
-
-    if (!normalizedCameraId) {
-      return (
-        <div style={frameStyle} {...imageProps}>
-          <div style={{ ...overlayStyle, color: "#777", fontWeight: 800 }}>
-            No camera assigned
-          </div>
-        </div>
-      );
-    }
-
-    const stream = cameraStreams[normalizedCameraId];
-
-    if (!stream) {
-      return (
-        <div style={frameStyle} {...imageProps}>
-          <div style={{ ...overlayStyle, color: "#bbb", fontWeight: 800 }}>
-            {cameraSocketStatus === "connected" ? "Waiting for WebRTC stream..." : "Connecting to camera backend..."}
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div style={frameStyle} {...imageProps}>
-        <video
-          key={`${cameraId}-${streamRefreshToken}`}
-          ref={(node) => {
-            if (!node) return;
-            cameraImageRefs.current[normalizedCameraId] = node;
-            if (node.srcObject !== stream) {
-              node.srcObject = stream;
-            }
-          }}
-          autoPlay
-          muted
-          playsInline
-          style={mediaStyle}
-          onLoadedData={(e) => {
-            setCameraLoadState((current) => {
-              if (current[normalizedCameraId] === "loaded") return current;
-              return { ...current, [normalizedCameraId]: "loaded" };
-            });
-            imageProps.onLoadedData?.(e);
-          }}
-          onError={(e) => {
-            setCameraLoadState((current) => {
-              const nextState = "error: stream";
-              if (current[normalizedCameraId] === nextState) return current;
-              return { ...current, [normalizedCameraId]: nextState };
-            });
-            imageProps.onError?.(e);
-          }}
-        />
-      </div>
-    );
-  };
+  const CameraImage = ({ cameraId, alt, style, ...imageProps }) => (
+    <CameraFeed
+      role={cameraId}
+      label={alt}
+      rotateDeg={cameraRotateDeg}
+      style={style}
+      {...imageProps}
+    />
+  );
 
   const CameraCard = ({ camera }) => (
     <div
@@ -315,7 +180,7 @@ export default function ScienceMonitor() {
       body = (
         <div style={{ display: "grid", gap: "10px" }}>
           <CameraImage
-            cameraId={0}
+            cameraId={CAMERA_ROLES.SCIENCE_1}
             alt="Latest panorama preview"
             style={{ width: "100%", maxHeight: "50vh", objectFit: "cover", borderRadius: "10px", border: "1px solid #444", background: "#111" }}
             pausedStyle={{ height: "40vh" }}

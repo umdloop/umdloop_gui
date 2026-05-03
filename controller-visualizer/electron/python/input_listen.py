@@ -37,7 +37,7 @@ for controller_device in range(pygame.joystick.get_count()):
         joystick.rumble(1.0, 5.0, 750)
         sleep(0.7)
         joystick.stop_rumble()
-    except e:
+    except Exception as e:
         print("No Rumble for:",joystick.get_name())
 
 #Disable the Touchpad on Controller
