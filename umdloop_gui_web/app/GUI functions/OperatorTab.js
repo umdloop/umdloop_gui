@@ -79,7 +79,7 @@ export default function OperatorTab({ selectedSubsystem, setSelectedSubsystem })
   };
 
   const resetStopwatch = () => {
-    stopwatchStartRef.current = Date.now();
+    stopwatchStartRef.current = null;
     setStopwatchElapsedMs(0);
     setStopwatchRunning(false);
   };

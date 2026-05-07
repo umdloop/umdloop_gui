@@ -129,6 +129,7 @@ export default function useWebRTCCameras(url) {
         type: "ice",
         id,
         candidate: event.candidate.candidate,
+        sdpMid: event.candidate.sdpMid,
         sdpMLineIndex: event.candidate.sdpMLineIndex,
       });
     };
@@ -186,10 +187,15 @@ export default function useWebRTCCameras(url) {
         case "ice": {
           const pc = pcsRef.current.get(String(getCameraId(msg) ?? ""));
           if (pc) {
-            pc.addIceCandidate({
+            const sdpMLineIndex = msg.sdpMLineIndex ?? msg.mlineIndex;
+            const candidate = {
               candidate: msg.candidate,
-              sdpMLineIndex: msg.sdpMLineIndex ?? msg.mlineIndex ?? 0,
-            }).catch(() => {});
+            };
+
+            if (msg.sdpMid != null) candidate.sdpMid = msg.sdpMid;
+            if (sdpMLineIndex != null) candidate.sdpMLineIndex = sdpMLineIndex;
+
+            pc.addIceCandidate(candidate).catch(() => {});
           }
           break;
         }

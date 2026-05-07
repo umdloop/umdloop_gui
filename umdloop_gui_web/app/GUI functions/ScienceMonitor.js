@@ -10,6 +10,63 @@ import SubsystemBar from "./SubsystemBar";
 const RAMAN_WS_URL = "ws://localhost:5001/ws/spectrum";
 const SCIENCE_CAMERA_ROLES = [CAMERA_ROLES.SCIENCE_1, CAMERA_ROLES.SCIENCE_2, CAMERA_ROLES.SCIENCE_3];
 
+function CameraImage({ cameraId, alt, rotateDeg, style, ...imageProps }) {
+  return (
+    <CameraFeed
+      role={cameraId}
+      label={alt}
+      rotateDeg={rotateDeg}
+      style={style}
+      {...imageProps}
+    />
+  );
+}
+
+function CameraCard({ camera, rotateDeg, onOpenCamera }) {
+  return (
+    <div
+      onClick={() => onOpenCamera(camera)}
+      style={{
+        background: "#2b2b2b",
+        borderRadius: "10px",
+        border: "1px solid #3d3d3d",
+        padding: "5px",
+        cursor: "pointer",
+        display: "flex",
+        flexDirection: "column",
+        minHeight: 0,
+        height: "100%",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = "#c90202";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = "#3d3d3d";
+      }}
+    >
+      <h4 style={{ color: "white", fontSize: "10px", fontWeight: "bold", textAlign: "center", marginBottom: "3px" }}>
+        {camera.label} {camera.id ? `(${camera.id})` : "(No Cam)"}
+      </h4>
+      <CameraImage
+        cameraId={camera.id}
+        alt={camera.label}
+        rotateDeg={rotateDeg}
+        style={{
+          width: "100%",
+          flex: 1,
+          objectFit: "cover",
+          borderRadius: "6px",
+          background: "black",
+          minHeight: 0,
+          transform: `rotate(${rotateDeg}deg)`,
+          transformOrigin: "center center",
+        }}
+        pausedStyle={{ fontSize: "12px" }}
+      />
+    </div>
+  );
+}
+
 export default function ScienceMonitor() {
   const [selectedScienceTab, setSelectedScienceTab] = useState(SCIENCE_SUBSYSTEMS[0]);
   const [fullscreenCam, setFullscreenCam] = useState(null);
@@ -57,58 +114,6 @@ export default function ScienceMonitor() {
     return () => window.clearInterval(intervalId);
   }, [stopwatchRunning]);
 
-  const CameraImage = ({ cameraId, alt, style, ...imageProps }) => (
-    <CameraFeed
-      role={cameraId}
-      label={alt}
-      rotateDeg={cameraRotateDeg}
-      style={style}
-      {...imageProps}
-    />
-  );
-
-  const CameraCard = ({ camera }) => (
-    <div
-      onClick={() => setFullscreenCam(camera)}
-      style={{
-        background: "#2b2b2b",
-        borderRadius: "10px",
-        border: "1px solid #3d3d3d",
-        padding: "5px",
-        cursor: "pointer",
-        display: "flex",
-        flexDirection: "column",
-        minHeight: 0,
-        height: "100%",
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = "#c90202";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = "#3d3d3d";
-      }}
-    >
-      <h4 style={{ color: "white", fontSize: "10px", fontWeight: "bold", textAlign: "center", marginBottom: "3px" }}>
-        {camera.label} {camera.id ? `(${camera.id})` : "(No Cam)"}
-      </h4>
-      <CameraImage
-        cameraId={camera.id}
-        alt={camera.label}
-        style={{
-          width: "100%",
-          flex: 1,
-          objectFit: "cover",
-          borderRadius: "6px",
-          background: "black",
-          minHeight: 0,
-          transform: `rotate(${cameraRotateDeg}deg)`,
-          transformOrigin: "center center",
-        }}
-        pausedStyle={{ fontSize: "12px" }}
-      />
-    </div>
-  );
-
   const formatStopwatch = (elapsedMs) => {
     const totalTenths = Math.floor(elapsedMs / 100);
     const minutes = String(Math.floor(totalTenths / 600)).padStart(2, "0");
@@ -129,7 +134,7 @@ export default function ScienceMonitor() {
   };
 
   const resetStopwatch = () => {
-    stopwatchStartRef.current = Date.now();
+    stopwatchStartRef.current = null;
     setStopwatchElapsedMs(0);
     setStopwatchRunning(false);
   };
@@ -157,6 +162,7 @@ export default function ScienceMonitor() {
         <CameraImage
           cameraId={fullscreenCam.id}
           alt={fullscreenCam.label}
+          rotateDeg={cameraRotateDeg}
           style={{
             maxWidth: "100%",
             maxHeight: "80vh",
@@ -184,6 +190,7 @@ export default function ScienceMonitor() {
           <CameraImage
             cameraId={CAMERA_ROLES.SCIENCE_1}
             alt="Latest panorama preview"
+            rotateDeg={cameraRotateDeg}
             style={{ width: "100%", maxHeight: "50vh", objectFit: "cover", borderRadius: "10px", border: "1px solid #444", background: "#111" }}
             pausedStyle={{ height: "40vh" }}
           />
@@ -376,6 +383,7 @@ export default function ScienceMonitor() {
                     <CameraImage
                       cameraId={camera.id}
                       alt={camera.label}
+                      rotateDeg={cameraRotateDeg}
                       onClick={() => setFullscreenCam(camera)}
                       style={{
                         width: "100%",
@@ -440,6 +448,7 @@ export default function ScienceMonitor() {
                 <CameraImage
                   cameraId={tab2NightVisionCamera.id}
                   alt={tab2NightVisionCamera.label}
+                  rotateDeg={cameraRotateDeg}
                   onClick={() => setFullscreenCam(tab2NightVisionCamera)}
                   style={{
                     width: "100%",
@@ -507,6 +516,7 @@ export default function ScienceMonitor() {
                 <CameraImage
                   cameraId={tab2NightVisionCamera.id}
                   alt={tab2NightVisionCamera.label}
+                  rotateDeg={cameraRotateDeg}
                   onClick={() => setFullscreenCam(tab2NightVisionCamera)}
                   style={{
                     width: "100%",
@@ -573,10 +583,10 @@ export default function ScienceMonitor() {
               </div>
             </div>
             <div style={{ display: "grid", gridTemplateRows: "minmax(0, 1fr) minmax(0, 1fr)", gap: "6px", minHeight: 0 }}>
-              <CameraCard camera={scienceCameras[0]} />
+              <CameraCard camera={scienceCameras[0]} rotateDeg={cameraRotateDeg} onOpenCamera={setFullscreenCam} />
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", minHeight: 0 }}>
-                <CameraCard camera={scienceCameras[1]} />
-                <CameraCard camera={scienceCameras[2]} />
+                <CameraCard camera={scienceCameras[1]} rotateDeg={cameraRotateDeg} onOpenCamera={setFullscreenCam} />
+                <CameraCard camera={scienceCameras[2]} rotateDeg={cameraRotateDeg} onOpenCamera={setFullscreenCam} />
               </div>
             </div>
           </div>
