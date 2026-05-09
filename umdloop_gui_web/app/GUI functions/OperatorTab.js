@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import RamanPlot from "../../spectrometer/RamanPlot";
 import CameraFeed from "./CameraFeed";
 import CameraManagerModal from "./CameraManagerModal";
@@ -19,17 +19,70 @@ export default function OperatorTab({ selectedSubsystem, setSelectedSubsystem })
   const [lastPanoramaLabel, setLastPanoramaLabel] = useState("No panorama captured yet.");
   const [sciencePopup, setSciencePopup] = useState(null);
   const [showCameraManager, setShowCameraManager] = useState(false);
+  const [stopwatchRunning, setStopwatchRunning] = useState(false);
+  const [stopwatchElapsedMs, setStopwatchElapsedMs] = useState(0);
+  const [locationReached, setLocationReached] = useState(false);
+  const stopwatchStartRef = useRef(null);
+  const driveRosCommandPlaceholders = ["ROS2 Command 1", "ROS2 Command 2", "ROS2 Command 3", "ROS2 Command 4"];
+  const confettiPieces = Array.from({ length: 42 }, (_, index) => ({
+    id: index,
+    color: ["#ff4d4d", "#ffd166", "#06d6a0", "#4cc9f0", "#f72585", "#ffffff"][index % 6],
+    delay: `${(index % 7) * 0.08}s`,
+    duration: `${1.55 + (index % 5) * 0.16}s`,
+    rotation: `${(index * 37) % 360}deg`,
+    burstX: `${((index % 10) - 4.5) * 10}px`,
+    burstY: `${-185 - (index % 7) * 24}px`,
+    fallX: `${((index % 12) - 5.5) * 24}px`,
+    fallY: `${300 + (index % 8) * 36}px`,
+  }));
 
   useEffect(() => {
     const handleKey = (e) => {
       if (e.key === "Escape") {
         setFullscreenCam(null);
         setSciencePopup(null);
+        setLocationReached(false);
       }
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, []);
+
+  useEffect(() => {
+    if (!stopwatchRunning) return undefined;
+
+    const intervalId = window.setInterval(() => {
+      const startedAt = stopwatchStartRef.current ?? Date.now();
+      setStopwatchElapsedMs(Date.now() - startedAt);
+    }, 100);
+
+    return () => window.clearInterval(intervalId);
+  }, [stopwatchRunning]);
+
+  const formatStopwatch = (elapsedMs) => {
+    const totalTenths = Math.floor(elapsedMs / 100);
+    const minutes = String(Math.floor(totalTenths / 600)).padStart(2, "0");
+    const seconds = String(Math.floor((totalTenths % 600) / 10)).padStart(2, "0");
+    const tenths = totalTenths % 10;
+    return `${minutes}:${seconds}.${tenths}`;
+  };
+
+  const startStopwatch = () => {
+    stopwatchStartRef.current = Date.now() - stopwatchElapsedMs;
+    setStopwatchRunning(true);
+  };
+
+  const pauseStopwatch = () => {
+    const startedAt = stopwatchStartRef.current ?? Date.now();
+    setStopwatchElapsedMs(Date.now() - startedAt);
+    setStopwatchRunning(false);
+  };
+
+  const resetStopwatch = () => {
+    stopwatchStartRef.current = null;
+    setStopwatchElapsedMs(0);
+    setStopwatchRunning(false);
+  };
 
   const FullscreenOverlay = () =>
     fullscreenCam && (
@@ -164,19 +217,103 @@ export default function OperatorTab({ selectedSubsystem, setSelectedSubsystem })
       <button onClick={() => setCameraRotateDeg(0)} style={{ borderRadius: "6px", border: "1px solid #555", background: "#303030", color: "white", cursor: "pointer", padding: "4px 10px", fontSize: "11px" }}>Reset</button>
       <div style={{ width: "1px", height: "18px", background: "#4a4a4a" }} />
       <span style={{ fontSize: "11px", color: "#ddd", fontWeight: 800 }}>View:</span>
-      <button onClick={() => setSelectedSubsystem?.("Drive")} style={{ borderRadius: "6px", border: "1px solid #555", background: selectedSubsystem === "Drive" ? "#7c1919" : "#303030", color: "white", cursor: "pointer", padding: "4px 10px", fontSize: "11px" }}>Drive</button>
+      <button onClick={() => setSelectedSubsystem?.("Drive (Default)")} style={{ borderRadius: "6px", border: "1px solid #555", background: selectedSubsystem === "Drive (Default)" ? "#7c1919" : "#303030", color: "white", cursor: "pointer", padding: "4px 10px", fontSize: "11px" }}>Drive</button>
+      <button onClick={() => setSelectedSubsystem?.("Drive (Science)")} style={{ borderRadius: "6px", border: "1px solid #555", background: selectedSubsystem === "Drive (Science)" ? "#7c1919" : "#303030", color: "white", cursor: "pointer", padding: "4px 10px", fontSize: "11px" }}>Drive Science</button>
       <button onClick={() => setSelectedSubsystem?.("Arm")} style={{ borderRadius: "6px", border: "1px solid #555", background: selectedSubsystem === "Arm" ? "#7c1919" : "#303030", color: "white", cursor: "pointer", padding: "4px 10px", fontSize: "11px" }}>Arm</button>
-      <button onClick={() => setSelectedSubsystem?.("Science")} style={{ borderRadius: "6px", border: "1px solid #555", background: selectedSubsystem === "Science" ? "#7c1919" : "#303030", color: "white", cursor: "pointer", padding: "4px 10px", fontSize: "11px" }}>Science</button>
       <button onClick={() => setShowCameraManager(true)} style={{ borderRadius: "6px", border: "1px solid #555", background: "#1a3f6f", color: "white", cursor: "pointer", padding: "4px 10px", fontSize: "11px", fontWeight: 700 }}>Camera Manager</button>
+      {(selectedSubsystem === "Drive (Default)" || selectedSubsystem === "Drive") ? (
+        <button
+          onClick={() => setLocationReached(true)}
+          style={{
+            marginLeft: "auto",
+            borderRadius: "8px",
+            border: locationReached ? "1px solid #2f7d3a" : "1px solid #803737",
+            background: locationReached ? "#1f8f35" : "#8a1f1f",
+            color: "white",
+            cursor: "pointer",
+            padding: "6px 14px",
+            fontSize: "12px",
+            fontWeight: 900,
+          }}
+        >
+          Location Reached
+        </button>
+      ) : null}
     </div>
   );
 
-  if (selectedSubsystem === "Drive") {
+  if (selectedSubsystem === "Drive (Science)") {
+    const scienceDrivePanels = [
+      { title: "Wide-Angle Panorama Image", tone: "#2d4f62" },
+      { title: "Stratigraphic Profile Image", tone: "#6a5234" },
+      { title: "Close-Up High Res. Image", tone: "#5c3f2d" },
+      { title: "GNSS Coords. / Elevation", tone: "#2d3b4f" },
+    ];
+
+    return (
+      <div style={{ padding: "12px", minHeight: 0, height: "100%", background: "#1a1a1a", overflow: "auto" }}>
+        <div style={{ width: "100%", border: "2px solid #3d3d3d", borderRadius: "14px", background: "#202020", padding: "16px", display: "grid", gridTemplateRows: "auto auto repeat(4, minmax(0, 1fr))", gap: "12px", minHeight: "100%" }}>
+          <div style={{ color: "white", fontWeight: 900, fontSize: "18px", textAlign: "center", letterSpacing: "0.03em" }}>
+            Rover Operator (Driver)
+          </div>
+          <div style={{ border: "2px solid #4a4a4a", borderRadius: "10px", background: "#262626", padding: "10px 12px", display: "grid", gap: "8px" }}>
+            <div style={{ color: "#d9d9d9", fontSize: "11px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+              Stopwatch
+            </div>
+            <div style={{ color: "white", fontSize: "28px", fontWeight: 900, textAlign: "center", fontVariantNumeric: "tabular-nums", lineHeight: 1.1 }}>
+              {formatStopwatch(stopwatchElapsedMs)}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "8px" }}>
+              <button
+                onClick={stopwatchRunning ? pauseStopwatch : startStopwatch}
+                style={{ borderRadius: "8px", border: "1px solid #555", background: stopwatchRunning ? "#6d1111" : "#303030", color: "white", cursor: "pointer", fontWeight: 700, padding: "6px 10px" }}
+              >
+                {stopwatchRunning ? "Pause" : "Start"}
+              </button>
+              <button
+                onClick={resetStopwatch}
+                style={{ borderRadius: "8px", border: "1px solid #555", background: "#303030", color: "white", cursor: "pointer", fontWeight: 700, padding: "6px 10px" }}
+              >
+                Reset
+              </button>
+            </div>
+          </div>
+          {scienceDrivePanels.map((panel) => (
+            <div key={panel.title} style={{ background: "#232323", border: "2px solid #3d3d3d", borderRadius: "10px", padding: "10px", display: "grid", gridTemplateRows: "auto minmax(0, 1fr)", gap: "8px", minHeight: 0 }}>
+              <div style={{ color: "#e8e8e8", fontSize: "11px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                {panel.title}
+              </div>
+              <div
+                style={{
+                  borderRadius: "8px",
+                  border: "1px solid #4a4a4a",
+                  background: `linear-gradient(180deg, ${panel.tone} 0%, #1b1b1b 100%)`,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "rgba(255,255,255,0.82)",
+                  fontWeight: 800,
+                  fontSize: panel.title === "GNSS Coords. / Elevation" ? "18px" : "20px",
+                  textAlign: "center",
+                  padding: "12px",
+                  minHeight: 0,
+                }}
+              >
+                {panel.title === "GNSS Coords. / Elevation" ? "GNSS Coords. / Elevation" : panel.title}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (selectedSubsystem === "Drive (Default)" || selectedSubsystem === "Drive") {
     const wheelGroups = [
-      { label: "Top Left Wheel", roles: [CAMERA_ROLES.WHEEL_TL_A, CAMERA_ROLES.WHEEL_TL_B] },
-      { label: "Top Right Wheel", roles: [CAMERA_ROLES.WHEEL_TR_A, CAMERA_ROLES.WHEEL_TR_B] },
-      { label: "Bottom Left Wheel", roles: [CAMERA_ROLES.WHEEL_BL_A, CAMERA_ROLES.WHEEL_BL_B] },
-      { label: "Bottom Right Wheel", roles: [CAMERA_ROLES.WHEEL_BR_A, CAMERA_ROLES.WHEEL_BR_B] },
+      { label: "Top Left Wheel", role: CAMERA_ROLES.WHEEL_TL_A },
+      { label: "Top Right Wheel", role: CAMERA_ROLES.WHEEL_TR_A },
+      { label: "Bottom Left Wheel", role: CAMERA_ROLES.WHEEL_BL_A },
+      { label: "Bottom Right Wheel", role: CAMERA_ROLES.WHEEL_BR_A },
     ];
 
     return (
@@ -189,6 +326,27 @@ export default function OperatorTab({ selectedSubsystem, setSelectedSubsystem })
           >
             {emergencyStop ? "EMERGENCY STOP ACTIVE" : "Emergency Stop"}
           </button>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "6px", marginTop: "8px" }}>
+            {driveRosCommandPlaceholders.map((commandLabel) => (
+              <button
+                key={commandLabel}
+                type="button"
+                style={{
+                  minHeight: "42px",
+                  borderRadius: "8px",
+                  border: "1px solid #555",
+                  background: "#303030",
+                  color: "#d8d8d8",
+                  cursor: "pointer",
+                  fontWeight: 800,
+                  fontSize: "10px",
+                  padding: "6px",
+                }}
+              >
+                {commandLabel}
+              </button>
+            ))}
+          </div>
         </div>
 
         <ControlRow />
@@ -205,26 +363,22 @@ export default function OperatorTab({ selectedSubsystem, setSelectedSubsystem })
             {wheelGroups.map((wheel) => (
               <div key={wheel.label} style={{ background: "#2b2b2b", borderRadius: "10px", border: "1px solid #3d3d3d", padding: "4px", display: "flex", flexDirection: "column", minHeight: 0 }}>
                 <div style={{ color: "white", fontSize: "8px", fontWeight: 700, textAlign: "center", marginBottom: "2px" }}>{wheel.label}</div>
-                <div style={{ display: "flex", gap: "3px", flex: 1, minHeight: 0 }}>
-                  {wheel.roles.map((role) => (
-                    <CameraFeed
-                      key={role}
-                      role={role}
-                      label={role}
-                      rotateDeg={cameraRotateDeg}
-                      onClick={() => setFullscreenCam({ label: `${wheel.label} - ${role}`, role })}
-                      style={{ flex: 1, borderRadius: 4, border: "1px solid #3d3d3d", cursor: "pointer" }}
-                    />
-                  ))}
-                </div>
+                <CameraFeed
+                  role={wheel.role}
+                  label={wheel.label}
+                  rotateDeg={cameraRotateDeg}
+                  onClick={() => setFullscreenCam({ label: wheel.label, role: wheel.role })}
+                  style={{ flex: 1, borderRadius: 4, border: "1px solid #3d3d3d", cursor: "pointer" }}
+                />
               </div>
             ))}
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px", minHeight: 0 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "6px", minHeight: 0 }}>
             {[
               { label: "Back Camera", role: CAMERA_ROLES.BACK },
               { label: "Left Side", role: CAMERA_ROLES.LEFT_SIDE },
               { label: "Right Side", role: CAMERA_ROLES.RIGHT_SIDE },
+              { label: "Radio View", role: CAMERA_ROLES.RADIO_VIEW },
             ].map((cam) => (
               <CameraFeed
                 key={cam.role}
@@ -238,6 +392,87 @@ export default function OperatorTab({ selectedSubsystem, setSelectedSubsystem })
           </div>
         </div>
         <FullscreenOverlay />
+        {locationReached ? (
+          <div
+            tabIndex={-1}
+            onClick={() => setLocationReached(false)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 1200,
+              background: "rgba(0,0,0,0.86)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "24px",
+              overflow: "hidden",
+            }}
+          >
+            <style>
+              {`
+                @keyframes locationReachedConfetti {
+                  0% {
+                    opacity: 0;
+                    transform: translate3d(-50%, -50%, 0) rotate(0deg) scale(0.65);
+                  }
+                  10% {
+                    opacity: 1;
+                  }
+                  36% {
+                    opacity: 1;
+                    transform: translate3d(calc(-50% + var(--confetti-burst-x)), calc(-50% + var(--confetti-burst-y)), 0) rotate(260deg) scale(1);
+                  }
+                  100% {
+                    opacity: 0;
+                    transform: translate3d(calc(-50% + var(--confetti-fall-x)), calc(-50% + var(--confetti-fall-y)), 0) rotate(780deg) scale(0.95);
+                  }
+                }
+              `}
+            </style>
+            {confettiPieces.map((piece) => (
+              <div
+                key={piece.id}
+                style={{
+                  position: "absolute",
+                  left: "50%",
+                  top: "50%",
+                  width: piece.id % 3 === 0 ? "7px" : "10px",
+                  height: piece.id % 3 === 0 ? "16px" : "8px",
+                  borderRadius: piece.id % 4 === 0 ? "9999px" : "2px",
+                  background: piece.color,
+                  transform: `rotate(${piece.rotation})`,
+                  opacity: 0,
+                  animation: `locationReachedConfetti ${piece.duration} cubic-bezier(0.18, 0.82, 0.28, 1) ${piece.delay} 2`,
+                  "--confetti-burst-x": piece.burstX,
+                  "--confetti-burst-y": piece.burstY,
+                  "--confetti-fall-x": piece.fallX,
+                  "--confetti-fall-y": piece.fallY,
+                }}
+              />
+            ))}
+            <div
+              onClick={(event) => event.stopPropagation()}
+              style={{
+                width: "min(900px, 92vw)",
+                minHeight: "min(360px, 70vh)",
+                borderRadius: "14px",
+                border: "3px solid #2f7d3a",
+                background: "#102215",
+                boxShadow: "0 18px 60px rgba(0,0,0,0.55)",
+                color: "white",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                textAlign: "center",
+                fontSize: "clamp(44px, 8vw, 96px)",
+                fontWeight: 1000,
+                letterSpacing: "0.04em",
+              }}
+            >
+              LOCATION REACHED
+            </div>
+          </div>
+        ) : null}
         {showCameraManager && <CameraManagerModal onClose={() => setShowCameraManager(false)} />}
       </div>
     );
@@ -269,6 +504,26 @@ export default function OperatorTab({ selectedSubsystem, setSelectedSubsystem })
               <div style={{ fontSize: "11px", color: "#ddd", marginBottom: "4px", fontWeight: 800 }}>Clamp Distance to Fully Close</div>
               <input type="range" min={0} max={100} value={armClampDistance} onChange={(e) => setArmClampDistance(Number(e.target.value))} style={{ width: "100%" }} />
               <div style={{ color: "white", fontSize: "12px" }}>{armClampDistance}%</div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+              {["Cylindrical Control", "Joint By Joint"].map((controlMode) => (
+                <button
+                  key={controlMode}
+                  type="button"
+                  style={{
+                    minHeight: "46px",
+                    borderRadius: "8px",
+                    border: "1px solid #555",
+                    background: "#303030",
+                    color: "#d8d8d8",
+                    cursor: "pointer",
+                    fontWeight: 900,
+                    padding: "8px",
+                  }}
+                >
+                  {controlMode}
+                </button>
+              ))}
             </div>
           </div>
         </div>

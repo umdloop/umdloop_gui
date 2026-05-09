@@ -5,6 +5,7 @@ import MapView from "./MapView";
 import OperationsWall from "./OperationsWall";
 import OperatorTab from "./OperatorTab";
 import Navigation from "./Navigation";
+import ScienceMonitor from "./ScienceMonitor";
 import TechnicianDashboard from "./TechnicianDashboard";
 import SubsystemBar from "./SubsystemBar";
 import { NAVIGATION_BUTTONS } from "./pageConstants";
@@ -28,6 +29,14 @@ export default function PageContent({
     return (
       <div style={{ height: "100%", minHeight: 0 }}>
         <TechnicianDashboard />
+      </div>
+    );
+  }
+
+  if (selectedMode === "Science") {
+    return (
+      <div style={{ height: "100%", minHeight: 0 }}>
+        <ScienceMonitor />
       </div>
     );
   }

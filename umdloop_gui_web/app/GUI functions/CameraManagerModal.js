@@ -7,7 +7,26 @@ import CameraFeed from "./CameraFeed";
 
 const ROLE_OPTIONS = [
   { value: "", label: "Unassigned" },
-  ...Object.entries(CAMERA_ROLES).map(([, value]) => ({ value, label: value })),
+  { value: CAMERA_ROLES.FRONT, label: "Front Camera" },
+  { value: CAMERA_ROLES.BACK, label: "Back Camera" },
+  { value: CAMERA_ROLES.LEFT_SIDE, label: "Left Side Camera" },
+  { value: CAMERA_ROLES.RIGHT_SIDE, label: "Right Side Camera" },
+  { value: CAMERA_ROLES.RADIO_VIEW, label: "Radio View" },
+  { value: CAMERA_ROLES.WHEEL_TL_A, label: "TL Wheel A" },
+  { value: CAMERA_ROLES.WHEEL_TL_B, label: "TL Wheel B" },
+  { value: CAMERA_ROLES.WHEEL_TR_A, label: "TR Wheel A" },
+  { value: CAMERA_ROLES.WHEEL_TR_B, label: "TR Wheel B" },
+  { value: CAMERA_ROLES.WHEEL_BL_A, label: "BL Wheel A" },
+  { value: CAMERA_ROLES.WHEEL_BL_B, label: "BL Wheel B" },
+  { value: CAMERA_ROLES.WHEEL_BR_A, label: "BR Wheel A" },
+  { value: CAMERA_ROLES.WHEEL_BR_B, label: "BR Wheel B" },
+  { value: CAMERA_ROLES.ARM_BASE, label: "Arm Base" },
+  { value: CAMERA_ROLES.ARM_JOINT, label: "Arm Joint" },
+  { value: CAMERA_ROLES.ARM_EE, label: "Arm End Effector" },
+  { value: CAMERA_ROLES.ARM_GRIPPER, label: "Arm Gripper" },
+  { value: CAMERA_ROLES.SCIENCE_1, label: "Science Cam 1 / Overhead Scoops / Nightvision" },
+  { value: CAMERA_ROLES.SCIENCE_2, label: "Science Cam 2 / View of Scoops" },
+  { value: CAMERA_ROLES.SCIENCE_3, label: "Science Cam 3 / View of Sampler / Rover Field View" },
 ];
 
 const QUALITY_OPTIONS = ["low", "medium", "high", "ultra"];
