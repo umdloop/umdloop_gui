@@ -51,6 +51,14 @@ static std::string buildPipelineString(const CameraConfig& cfg, const PlatformSp
               " ! video/x-raw,framerate=" + std::to_string(cfg.fps) + "/1";
     }
 
+    if (cfg.cropLeftHalf && cfg.width > 1) {
+        int outputWidth = cfg.width / 2;
+        int cropRight = cfg.width - outputWidth;
+        src += " ! videocrop right=" + std::to_string(cropRight) +
+               " ! video/x-raw,width=" + std::to_string(outputWidth) +
+               ",height=" + std::to_string(cfg.height);
+    }
+
     const int bitrate = cfg.computeBitrate();
     std::string enc = specs.encoder;
     if (specs.encoder == "vtenc_h264") {

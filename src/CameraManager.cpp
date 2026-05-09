@@ -23,6 +23,7 @@ struct DiscoveryCandidate {
     std::string usbPath;
     std::string physicalKey;
     std::vector<CameraMode> modes;
+    bool cropLeftHalf = false;
 };
 
 static std::string lowerCopy(std::string s) {
@@ -177,6 +178,20 @@ static bool isZedDevice(const std::string& displayName) {
     return name.find("zed") != std::string::npos;
 }
 
+static bool hasStereoSideBySideMode(const std::vector<CameraMode>& modes) {
+    return std::any_of(modes.begin(), modes.end(), [](const CameraMode& mode) {
+        return mode.width == 1344 && mode.height == 376;
+    });
+}
+
+static bool shouldCropLeftHalf(const std::string& displayName,
+                               const std::vector<CameraMode>& modes) {
+    std::string name = lowerCopy(displayName);
+    return isZedDevice(displayName) ||
+           name.find("stereo") != std::string::npos ||
+           hasStereoSideBySideMode(modes);
+}
+
 static bool looksLikeMetadataNode(const DiscoveryCandidate& c) {
     std::string name = lowerCopy(c.displayName);
     return name.find("metadata") != std::string::npos ||
@@ -291,6 +306,7 @@ void CameraManager::loadConfigs(const std::string& path) {
             cfg.fps        = obj.value("fps",      30);
             cfg.quality    = obj.value("quality",  "medium");
             cfg.exposure   = obj.value("exposure", -1);
+            cfg.cropLeftHalf = obj.value("cropLeftHalf", false);
             configs_[id]   = cfg;
         }
     } catch (const std::exception& e) {
@@ -312,6 +328,7 @@ void CameraManager::saveConfigs(const std::string& path) const {
             {"fps",        cfg.fps},
             {"quality",    cfg.quality},
             {"exposure",   cfg.exposure},
+            {"cropLeftHalf", cfg.cropLeftHalf},
         };
     }
     std::ofstream f(path);
@@ -409,10 +426,13 @@ void CameraManager::discoverCameras() {
         candidate.usbPath = usbPath;
         candidate.physicalKey = makePhysicalKey(display, devicePath, usbPath);
         candidate.modes = std::move(modes);
+        candidate.cropLeftHalf = shouldCropLeftHalf(candidate.displayName, candidate.modes);
 
         std::cout << "    -> path=" << candidate.devicePath
                   << " key=" << candidate.physicalKey
-                  << " modes=" << candidate.modes.size() << std::endl;
+                  << " modes=" << candidate.modes.size()
+                  << (candidate.cropLeftHalf ? " crop=left-half" : "")
+                  << std::endl;
 
         if (looksLikeMetadataNode(candidate)) {
             std::cout << "    -> skipped: no usable capture modes"
@@ -465,6 +485,7 @@ void CameraManager::discoverCameras() {
             }
             if (it->second.usbPath.empty() && !candidate.usbPath.empty())
                 it->second.usbPath = candidate.usbPath;
+            it->second.cropLeftHalf = candidate.cropLeftHalf;
             validateConfigMode(it->first, it->second, candidate.modes);
             activeCameraIds_.insert(it->first);
             continue;
@@ -476,6 +497,7 @@ void CameraManager::discoverCameras() {
         cfg.usbPath = candidate.usbPath;
         cfg.quality = "low";
         cfg.fps = 10;
+        cfg.cropLeftHalf = candidate.cropLeftHalf;
 
         const auto& modes = candidate.modes;
         if (!modes.empty()) {
@@ -493,6 +515,7 @@ void CameraManager::discoverCameras() {
                   << " default=" << cfg.format << " "
                   << cfg.width << "x" << cfg.height
                   << "@" << cfg.fps << " quality=" << cfg.quality
+                  << (cfg.cropLeftHalf ? " crop=left-half" : "")
                   << std::endl;
     }
 
@@ -695,6 +718,7 @@ std::string CameraManager::buildStateJson() const {
             {"quality",      cfg.quality},
             {"bitrate",      cfg.computeBitrate()},
             {"exposure",     cfg.exposure},
+            {"cropLeftHalf",  cfg.cropLeftHalf},
             {"capabilities", caps},
         });
     }

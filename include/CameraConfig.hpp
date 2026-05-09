@@ -13,6 +13,7 @@ struct CameraConfig {
     int         fps      = 30;
     std::string quality  = "medium"; // "low" | "medium" | "high" | "ultra"
     int         exposure = -1;       // -1 = auto; >= 0 = absolute exposure value (v4l2 only)
+    bool        cropLeftHalf = false; // true for side-by-side stereo devices where only left view is streamed
 
     int computeBitrate() const {
         double bpp;
@@ -20,6 +21,7 @@ struct CameraConfig {
         else if (quality == "high")  bpp = 0.20;
         else if (quality == "ultra") bpp = 0.35;
         else                         bpp = 0.10;
-        return static_cast<int>(bpp * width * height * fps);
+        int encodedWidth = cropLeftHalf ? width / 2 : width;
+        return static_cast<int>(bpp * encodedWidth * height * fps);
     }
 };
