@@ -17,7 +17,7 @@ export const GUI_REQUIRED_TOPICS = {
   },
   heading: {
     name: process.env.NEXT_PUBLIC_GUI_HEADING_TOPIC || "/heading",
-    messageType: process.env.NEXT_PUBLIC_GUI_HEADING_TYPE || "std_msgs/msg/Float64",
+    messageType: process.env.NEXT_PUBLIC_GUI_HEADING_TYPE || "msgs/msg/Heading",
   },
   diagnostics: {
     name: process.env.NEXT_PUBLIC_GUI_DIAGNOSTICS_TOPIC || "/diagnostics",

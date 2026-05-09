@@ -272,7 +272,7 @@ export default function TechnicianDashboard({ missionId }) {
     headingTopic.subscribe((msg) => {
       countBytes(msg);
       markHeartbeat("heading");
-      const heading = parseMetric(msg?.data ?? msg?.heading_deg ?? msg?.heading);
+      const heading = parseMetric(msg?.compass_bearing ?? msg?.data);
       if (heading != null) {
         setHeadingDeg(heading);
         markTopicAvailable("heading");
