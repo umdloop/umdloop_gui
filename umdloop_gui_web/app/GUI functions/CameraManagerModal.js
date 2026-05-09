@@ -41,7 +41,6 @@ function CameraCard({ camera }) {
   const isEnabled = camera.enabled;
   const cameraStats = stats[camera.id];
   const stream = streams[camera.id];
-  const canAssignRole = Boolean(stream);
 
   const selectedCap = localRes
     ? camera.capabilities?.find((c) => c.width === localRes.width && c.height === localRes.height && c.format === localRes.format)
@@ -134,8 +133,6 @@ function CameraCard({ camera }) {
         <select
           value={camera.role ?? ""}
           onChange={(e) => setRole(camera.id, e.target.value)}
-          disabled={!canAssignRole}
-          title={canAssignRole ? "Assign this camera to a GUI view" : "Preview or enable the camera first"}
           style={inputStyle}
         >
           {ROLE_OPTIONS.map((o) => (
@@ -144,11 +141,6 @@ function CameraCard({ camera }) {
             </option>
           ))}
         </select>
-        {!canAssignRole && (
-          <div style={{ fontSize: 10, color: "#888" }}>
-            Preview or enable this camera before assigning it to a view.
-          </div>
-        )}
 
         {camera.capabilities?.length > 0 && (
           <select
