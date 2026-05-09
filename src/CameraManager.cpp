@@ -165,17 +165,17 @@ static bool containsBusyError(const std::string& message) {
            message.find("resource busy") != std::string::npos;
 }
 
+static bool isZedDevice(const std::string& displayName) {
+    std::string name = lowerCopy(displayName);
+    return name.find("zed") != std::string::npos;
+}
+
 static std::string makePhysicalKey(const std::string& displayName,
                                    const std::string& devicePath,
                                    const std::string& usbPath) {
     if (!usbPath.empty()) return usbPath;
-    if (!displayName.empty()) return "name:" + lowerCopy(displayName);
+    if (isZedDevice(displayName) && !displayName.empty()) return "name:" + lowerCopy(displayName);
     return devicePath;
-}
-
-static bool isZedDevice(const std::string& displayName) {
-    std::string name = lowerCopy(displayName);
-    return name.find("zed") != std::string::npos;
 }
 
 static bool hasStereoSideBySideMode(const std::vector<CameraMode>& modes) {
