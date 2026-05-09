@@ -43,6 +43,7 @@ public:
 
     std::string   buildStateJson() const;
     PipelineStats getCameraStats(const std::string& id);
+    bool reapFailedPipelines();
 
 private:
     std::map<std::string, CameraConfig>                    configs_;

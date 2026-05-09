@@ -155,6 +155,8 @@ int main(int argc, char* argv[]) {
     struct StatsCtx { CameraManager* m; WsServer* s; } statsCtx{&manager, &ws};
     g_timeout_add(500, [](gpointer data) -> gboolean {
         auto& ctx = *static_cast<StatsCtx*>(data);
+        if (ctx.m->reapFailedPipelines())
+            ctx.s->sendMessage(ctx.m->buildStateJson());
         for (const auto& [id, cfg] : ctx.m->getConfigs()) {
             if (!ctx.m->isEnabled(id)) continue;
             auto s = ctx.m->getCameraStats(id);

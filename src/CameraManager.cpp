@@ -1,8 +1,10 @@
 #include "CameraManager.hpp"
 #include <algorithm>
+#include <chrono>
 #include <fstream>
 #include <gst/gst.h>
 #include <iostream>
+#include <thread>
 #ifdef __linux__
 #  include <climits>
 #  include <cstdlib>
@@ -124,6 +126,41 @@ static std::vector<CameraMode> parseCaps(GstCaps* caps) {
     });
 
     return modes;
+}
+
+static bool containsBusyError(const std::string& message) {
+    return message.find("Device or resource busy") != std::string::npos ||
+           message.find("Resource busy") != std::string::npos ||
+           message.find("resource busy") != std::string::npos;
+}
+
+static void logConfigConflicts(const std::map<std::string, CameraConfig>& configs) {
+    std::map<std::string, std::vector<std::string>> byLiveKey;
+
+    for (const auto& [id, cfg] : configs) {
+        std::string key;
+        if (!cfg.usbPath.empty()) {
+            key = cfg.usbPath;
+        } else if (!cfg.devicePath.empty()) {
+            key = cfg.devicePath;
+        }
+
+        if (!key.empty())
+            byLiveKey[key].push_back(id);
+    }
+
+    for (const auto& [key, ids] : byLiveKey) {
+        if (ids.size() < 2) continue;
+
+        std::cerr << "camera config conflict: ";
+        for (size_t i = 0; i < ids.size(); ++i) {
+            if (i) std::cerr << ", ";
+            std::cerr << ids[i];
+        }
+        std::cerr << " all map to " << key
+                  << "; only one pipeline can use a physical camera at a time"
+                  << std::endl;
+    }
 }
 
 
@@ -284,6 +321,7 @@ void CameraManager::discoverCameras() {
 
     g_list_free_full(devices, gst_object_unref);
     gst_object_unref(monitor);
+    logConfigConflicts(configs_);
 }
 
 void CameraManager::enableCamera(const std::string& id) {
@@ -295,25 +333,63 @@ void CameraManager::enableCamera(const std::string& id) {
 
     if (pipelines_.count(id)) disableCamera(id);
 
-    auto pipeline = std::make_unique<CameraPipeline>(it->second, stunServer_);
+    for (const auto& entry : pipelines_) {
+        const auto& activeId = entry.first;
+        auto activeCfg = configs_.find(activeId);
+        if (activeCfg == configs_.end()) continue;
 
-    if (onOffer_) {
-        pipeline->setOnOfferCreatedCallback([this, id](const std::string& sdp) {
-            onOffer_(id, sdp);
-        });
-    }
-    if (onIce_) {
-        pipeline->setOnIceCandidateCallback([this, id](const std::string& candidate, int mline) {
-            onIce_(id, candidate, mline);
-        });
+        const bool sameDevice = activeCfg->second.devicePath == it->second.devicePath;
+        const bool sameUsb = !activeCfg->second.usbPath.empty() &&
+                             activeCfg->second.usbPath == it->second.usbPath;
+        if (sameDevice || sameUsb) {
+            std::cerr << "enableCamera: refusing to start " << id
+                      << " because " << activeId << " is already using "
+                      << (sameUsb ? it->second.usbPath : it->second.devicePath)
+                      << std::endl;
+            return;
+        }
     }
 
-    if (pipeline->start()) {
-        pipelines_[id] = std::move(pipeline);
-        std::cout << "Camera enabled: " << id << std::endl;
-    } else {
-        std::cerr << "Failed to start pipeline for: " << id << std::endl;
+    std::string lastError;
+    constexpr int kMaxAttempts = 3;
+    for (int attempt = 1; attempt <= kMaxAttempts; ++attempt) {
+        auto pipeline = std::make_unique<CameraPipeline>(it->second, stunServer_);
+
+        if (onOffer_) {
+            pipeline->setOnOfferCreatedCallback([this, id](const std::string& sdp) {
+                onOffer_(id, sdp);
+            });
+        }
+        if (onIce_) {
+            pipeline->setOnIceCandidateCallback([this, id](const std::string& candidate, int mline) {
+                onIce_(id, candidate, mline);
+            });
+        }
+        pipeline->setOnErrorCallback([id](const std::string& message) {
+            std::cerr << "Pipeline error for " << id << ": " << message << std::endl;
+        });
+
+        if (pipeline->start()) {
+            pipelines_[id] = std::move(pipeline);
+            std::cout << "Camera enabled: " << id << std::endl;
+            return;
+        }
+
+        lastError = pipeline->getLastError();
+        if (attempt < kMaxAttempts && containsBusyError(lastError)) {
+            std::cerr << "Retrying camera " << id << " after busy device error"
+                      << " (attempt " << (attempt + 1) << "/" << kMaxAttempts << ")"
+                      << std::endl;
+            std::this_thread::sleep_for(std::chrono::milliseconds(350));
+            continue;
+        }
+
+        break;
     }
+
+    std::cerr << "Failed to start pipeline for: " << id;
+    if (!lastError.empty()) std::cerr << " (" << lastError << ")";
+    std::cerr << std::endl;
 }
 
 void CameraManager::disableCamera(const std::string& id) {
@@ -426,4 +502,23 @@ PipelineStats CameraManager::getCameraStats(const std::string& id) {
     auto it = pipelines_.find(id);
     if (it != pipelines_.end()) return it->second->getStats();
     return {};
+}
+
+bool CameraManager::reapFailedPipelines() {
+    bool changed = false;
+    for (auto it = pipelines_.begin(); it != pipelines_.end(); ) {
+        if (!it->second->hasFailed()) {
+            ++it;
+            continue;
+        }
+
+        std::cerr << "Camera disabled after pipeline failure: " << it->first;
+        const std::string err = it->second->getLastError();
+        if (!err.empty()) std::cerr << " (" << err << ")";
+        std::cerr << std::endl;
+
+        it = pipelines_.erase(it);
+        changed = true;
+    }
+    return changed;
 }

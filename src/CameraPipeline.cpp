@@ -3,6 +3,7 @@
 #include <chrono>
 #include <gst/sdp/gstsdpmessage.h>
 #include <iostream>
+#include <sstream>
 #include <sys/time.h>
 
 static std::string timestamp() {
@@ -98,6 +99,11 @@ CameraPipeline::~CameraPipeline() {
 
 bool CameraPipeline::start() {
     if (pipeline_) return true;
+    failed_.store(false);
+    {
+        std::lock_guard<std::mutex> lock(errorMutex_);
+        lastError_.clear();
+    }
 
     auto specs = PlatformDetect::getPlatformSpecifics();
     if (config_.devicePath == "test") specs.source = "videotestsrc";
@@ -111,6 +117,12 @@ bool CameraPipeline::start() {
         std::cerr << "[" << timestamp() << "] Pipeline parse error: " << error->message << std::endl;
         g_error_free(error);
         return false;
+    }
+
+    GstBus* bus = gst_element_get_bus(pipeline_);
+    if (bus) {
+        busWatchId_ = gst_bus_add_watch(bus, CameraPipeline::onBusMessage, this);
+        gst_object_unref(bus);
     }
 
     webrtcbin_ = gst_bin_get_by_name(GST_BIN(pipeline_), "webrtcbin");
@@ -162,6 +174,16 @@ bool CameraPipeline::start() {
         stop();
         return false;
     }
+    if (ret == GST_STATE_CHANGE_ASYNC) {
+        ret = gst_element_get_state(pipeline_, nullptr, nullptr, 2 * GST_SECOND);
+        if (ret == GST_STATE_CHANGE_FAILURE || failed_.load()) {
+            const std::string lastError = getLastError();
+            std::cerr << "[" << timestamp() << "] Pipeline failed while starting"
+                      << (lastError.empty() ? "" : ": " + lastError) << std::endl;
+            stop();
+            return false;
+        }
+    }
     std::cout << "[" << timestamp() << "] Pipeline state change: "
               << gst_element_state_change_return_get_name(ret) << std::endl;
 
@@ -178,6 +200,10 @@ bool CameraPipeline::start() {
 
 void CameraPipeline::stop() {
     offerScheduled_.store(false);
+    if (busWatchId_) {
+        g_source_remove(busWatchId_);
+        busWatchId_ = 0;
+    }
     if (webrtcbin_) {
         gst_element_set_state(webrtcbin_, GST_STATE_NULL);
         gst_object_unref(webrtcbin_);
@@ -224,6 +250,11 @@ PipelineStats CameraPipeline::getStats() {
     return s;
 }
 
+std::string CameraPipeline::getLastError() const {
+    std::lock_guard<std::mutex> lock(errorMutex_);
+    return lastError_;
+}
+
 GstPadProbeReturn CameraPipeline::statsProbe(GstPad*, GstPadProbeInfo* info, gpointer user_data) {
     auto* self = static_cast<CameraPipeline*>(user_data);
     if (GstBuffer* buf = GST_PAD_PROBE_INFO_BUFFER(info)) {
@@ -232,6 +263,54 @@ GstPadProbeReturn CameraPipeline::statsProbe(GstPad*, GstPadProbeInfo* info, gpo
                                    std::memory_order_relaxed);
     }
     return GST_PAD_PROBE_OK;
+}
+
+gboolean CameraPipeline::onBusMessage(GstBus*, GstMessage* message, gpointer user_data) {
+    auto* self = static_cast<CameraPipeline*>(user_data);
+
+    if (GST_MESSAGE_TYPE(message) == GST_MESSAGE_ERROR) {
+        GError* err = nullptr;
+        gchar* debug = nullptr;
+        gst_message_parse_error(message, &err, &debug);
+
+        std::ostringstream msg;
+        msg << "GStreamer error";
+        if (GST_MESSAGE_SRC(message))
+            msg << " from " << GST_MESSAGE_SRC_NAME(message);
+        if (err && err->message)
+            msg << ": " << err->message;
+        if (debug && *debug)
+            msg << " (" << debug << ")";
+
+        const std::string text = msg.str();
+        {
+            std::lock_guard<std::mutex> lock(self->errorMutex_);
+            self->lastError_ = text;
+        }
+        self->failed_.store(true);
+        self->busWatchId_ = 0;
+        std::cerr << "[" << timestamp() << "] " << text << std::endl;
+        if (self->onError_) self->onError_(text);
+
+        if (err) g_error_free(err);
+        if (debug) g_free(debug);
+        return G_SOURCE_REMOVE;
+    }
+
+    if (GST_MESSAGE_TYPE(message) == GST_MESSAGE_EOS) {
+        const std::string text = "GStreamer pipeline reached EOS";
+        {
+            std::lock_guard<std::mutex> lock(self->errorMutex_);
+            self->lastError_ = text;
+        }
+        self->failed_.store(true);
+        self->busWatchId_ = 0;
+        std::cerr << "[" << timestamp() << "] " << text << std::endl;
+        if (self->onError_) self->onError_(text);
+        return G_SOURCE_REMOVE;
+    }
+
+    return G_SOURCE_CONTINUE;
 }
 
 void CameraPipeline::onNegotiationNeeded(GstElement* webrtcbin, gpointer user_data) {
