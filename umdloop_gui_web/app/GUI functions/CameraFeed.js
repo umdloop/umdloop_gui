@@ -18,11 +18,13 @@ const OVERLAY_STYLE = {
   borderRadius: "inherit",
 };
 
-export default function CameraFeed({ role, label, style, rotateDeg = 0, onClick, height, passive = false }) {
+export default function CameraFeed({ role, cameraId, label, style, rotateDeg = 0, onClick, height, passive = false }) {
   const { connected, cameras, streams, enableCamera, disableCamera } = useWebRTC();
   const videoRef = useRef(null);
 
-  const camera = cameras.find((c) => c.role === role);
+  const camera = cameraId != null
+    ? cameras.find((c) => c.id === String(cameraId))
+    : cameras.find((c) => c.role === role);
   const stream = camera ? streams[camera.id] : undefined;
 
   // eslint-disable-next-line react-hooks/exhaustive-deps

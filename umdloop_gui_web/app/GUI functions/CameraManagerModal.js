@@ -12,14 +12,10 @@ const ROLE_OPTIONS = [
   { value: CAMERA_ROLES.LEFT_SIDE, label: "Left Side Camera" },
   { value: CAMERA_ROLES.RIGHT_SIDE, label: "Right Side Camera" },
   { value: CAMERA_ROLES.RADIO_VIEW, label: "Radio View" },
-  { value: CAMERA_ROLES.WHEEL_TL_A, label: "TL Wheel A" },
-  { value: CAMERA_ROLES.WHEEL_TL_B, label: "TL Wheel B" },
-  { value: CAMERA_ROLES.WHEEL_TR_A, label: "TR Wheel A" },
-  { value: CAMERA_ROLES.WHEEL_TR_B, label: "TR Wheel B" },
-  { value: CAMERA_ROLES.WHEEL_BL_A, label: "BL Wheel A" },
-  { value: CAMERA_ROLES.WHEEL_BL_B, label: "BL Wheel B" },
-  { value: CAMERA_ROLES.WHEEL_BR_A, label: "BR Wheel A" },
-  { value: CAMERA_ROLES.WHEEL_BR_B, label: "BR Wheel B" },
+  { value: CAMERA_ROLES.WHEEL_TL, label: "Top Left Wheel" },
+  { value: CAMERA_ROLES.WHEEL_TR, label: "Top Right Wheel" },
+  { value: CAMERA_ROLES.WHEEL_BL, label: "Bottom Left Wheel" },
+  { value: CAMERA_ROLES.WHEEL_BR, label: "Bottom Right Wheel" },
   { value: CAMERA_ROLES.ARM_BASE, label: "Arm Base" },
   { value: CAMERA_ROLES.ARM_JOINT, label: "Arm Joint" },
   { value: CAMERA_ROLES.ARM_EE, label: "Arm End Effector" },
@@ -30,14 +26,16 @@ const ROLE_OPTIONS = [
 ];
 
 const QUALITY_OPTIONS = ["low", "medium", "high", "ultra"];
+const DEFAULT_CAMERA_FPS = 10;
+const DEFAULT_CAMERA_QUALITY = "low";
 
 function CameraCard({ camera }) {
   const { cameras, stats, streams, enableCamera, disableCamera, renameCamera, setRole, setConfig } = useWebRTC();
   const [nameInput, setNameInput] = useState(camera.name ?? "");
   const [previewing, setPreviewing] = useState(false);
   const [localRes, setLocalRes] = useState(null);
-  const [localFps, setLocalFps] = useState(camera.fps ?? 30);
-  const [localQuality, setLocalQuality] = useState(camera.quality ?? "medium");
+  const [localFps, setLocalFps] = useState(camera.fps ?? DEFAULT_CAMERA_FPS);
+  const [localQuality, setLocalQuality] = useState(camera.quality ?? DEFAULT_CAMERA_QUALITY);
   const [localExposure, setLocalExposure] = useState(camera.exposure ?? -1);
 
   const isEnabled = camera.enabled;
@@ -100,6 +98,7 @@ function CameraCard({ camera }) {
     <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 12, background: "#1e1e1e", borderRadius: 10, border: "1px solid #3a3a3a", padding: 10 }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         <CameraFeed
+          cameraId={camera.id}
           role={camera.role || null}
           label={camera.name || camera.id}
           passive
@@ -133,7 +132,7 @@ function CameraCard({ camera }) {
 
         <select
           value={camera.role ?? ""}
-          onChange={(e) => setRole(camera.id, e.target.value || null)}
+          onChange={(e) => setRole(camera.id, e.target.value)}
           style={inputStyle}
         >
           {ROLE_OPTIONS.map((o) => (

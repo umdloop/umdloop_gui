@@ -8,10 +8,18 @@ import MissionPanel from "./MissionPanel";
 import { CAMERA_ROLES } from "./pageConstants";
 
 const RAMAN_WS_URL = "ws://localhost:5001/ws/spectrum";
+const CAMERA_ROTATIONS_STORAGE_KEY = "umdloop.cameraRotations";
 
 export default function OperatorTab({ selectedSubsystem, setSelectedSubsystem }) {
   const [fullscreenCam, setFullscreenCam] = useState(null);
-  const [cameraRotateDeg, setCameraRotateDeg] = useState(0);
+  const [cameraRotationByKey, setCameraRotationByKey] = useState(() => {
+    if (typeof window === "undefined") return {};
+    try {
+      return JSON.parse(window.localStorage.getItem(CAMERA_ROTATIONS_STORAGE_KEY) || "{}");
+    } catch {
+      return {};
+    }
+  });
   const [emergencyStop, setEmergencyStop] = useState(false);
   const [armClampDistance, setArmClampDistance] = useState(35);
   const [panoramaShots, setPanoramaShots] = useState(0);
@@ -49,6 +57,10 @@ export default function OperatorTab({ selectedSubsystem, setSelectedSubsystem })
   }, []);
 
   useEffect(() => {
+    window.localStorage.setItem(CAMERA_ROTATIONS_STORAGE_KEY, JSON.stringify(cameraRotationByKey));
+  }, [cameraRotationByKey]);
+
+  useEffect(() => {
     if (!stopwatchRunning) return undefined;
 
     const intervalId = window.setInterval(() => {
@@ -84,6 +96,30 @@ export default function OperatorTab({ selectedSubsystem, setSelectedSubsystem })
     setStopwatchRunning(false);
   };
 
+  const getCameraKey = (camera) => camera?.role ?? camera?.label;
+  const getCameraRotation = (camera) => {
+    const cameraKey = getCameraKey(camera);
+    return cameraKey ? cameraRotationByKey[cameraKey] ?? 0 : 0;
+  };
+
+  const updateFullscreenRotation = (getNextRotation) => {
+    const cameraKey = getCameraKey(fullscreenCam);
+    if (!cameraKey) return;
+
+    setCameraRotationByKey((prev) => {
+      const currentRotation = prev[cameraKey] ?? 0;
+      const nextRotation = typeof getNextRotation === "function"
+        ? getNextRotation(currentRotation)
+        : getNextRotation;
+      const normalizedRotation = ((nextRotation % 360) + 360) % 360;
+
+      return {
+        ...prev,
+        [cameraKey]: normalizedRotation,
+      };
+    });
+  };
+
   const FullscreenOverlay = () =>
     fullscreenCam && (
       <div
@@ -100,13 +136,39 @@ export default function OperatorTab({ selectedSubsystem, setSelectedSubsystem })
           padding: "20px",
         }}
       >
-        <h2 style={{ color: "white", fontSize: "22px", fontWeight: "bold", marginBottom: "12px" }}>{fullscreenCam.label}</h2>
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "center", marginBottom: 12 }}
+        >
+          <h2 style={{ color: "white", fontSize: "22px", fontWeight: "bold", margin: 0 }}>{fullscreenCam.label}</h2>
+          <button
+            type="button"
+            onClick={() => updateFullscreenRotation((d) => d - 90)}
+            style={{ borderRadius: 8, border: "1px solid #666", background: "#303030", color: "white", cursor: "pointer", padding: "7px 11px", fontWeight: 800 }}
+          >
+            -90°
+          </button>
+          <button
+            type="button"
+            onClick={() => updateFullscreenRotation((d) => d + 90)}
+            style={{ borderRadius: 8, border: "1px solid #666", background: "#303030", color: "white", cursor: "pointer", padding: "7px 11px", fontWeight: 800 }}
+          >
+            +90°
+          </button>
+          <button
+            type="button"
+            onClick={() => updateFullscreenRotation(0)}
+            style={{ borderRadius: 8, border: "1px solid #666", background: "#303030", color: "white", cursor: "pointer", padding: "7px 11px", fontWeight: 800 }}
+          >
+            Reset
+          </button>
+        </div>
         <div style={{ width: "min(1000px, 95vw)", height: "80vh" }}>
           <CameraFeed
             role={fullscreenCam.role}
             label={fullscreenCam.label}
             passive
-            rotateDeg={cameraRotateDeg}
+            rotateDeg={getCameraRotation(fullscreenCam)}
             style={{ height: "100%", borderRadius: 12 }}
           />
         </div>
@@ -211,11 +273,6 @@ export default function OperatorTab({ selectedSubsystem, setSelectedSubsystem })
     <div style={{ background: "#232323", border: "1px solid #3d3d3d", borderRadius: "10px", padding: "8px 12px", display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
       <MissionPanel />
       <div style={{ width: "1px", height: "18px", background: "#4a4a4a" }} />
-      <span style={{ fontSize: "11px", color: "#ddd", fontWeight: 800 }}>Rotate:</span>
-      <button onClick={() => setCameraRotateDeg((d) => (d - 90 + 360) % 360)} style={{ borderRadius: "6px", border: "1px solid #555", background: "#303030", color: "white", cursor: "pointer", padding: "4px 10px", fontSize: "11px" }}>-90°</button>
-      <button onClick={() => setCameraRotateDeg((d) => (d + 90) % 360)} style={{ borderRadius: "6px", border: "1px solid #555", background: "#303030", color: "white", cursor: "pointer", padding: "4px 10px", fontSize: "11px" }}>+90°</button>
-      <button onClick={() => setCameraRotateDeg(0)} style={{ borderRadius: "6px", border: "1px solid #555", background: "#303030", color: "white", cursor: "pointer", padding: "4px 10px", fontSize: "11px" }}>Reset</button>
-      <div style={{ width: "1px", height: "18px", background: "#4a4a4a" }} />
       <span style={{ fontSize: "11px", color: "#ddd", fontWeight: 800 }}>View:</span>
       <button onClick={() => setSelectedSubsystem?.("Drive (Default)")} style={{ borderRadius: "6px", border: "1px solid #555", background: selectedSubsystem === "Drive (Default)" ? "#7c1919" : "#303030", color: "white", cursor: "pointer", padding: "4px 10px", fontSize: "11px" }}>Drive</button>
       <button onClick={() => setSelectedSubsystem?.("Drive (Science)")} style={{ borderRadius: "6px", border: "1px solid #555", background: selectedSubsystem === "Drive (Science)" ? "#7c1919" : "#303030", color: "white", cursor: "pointer", padding: "4px 10px", fontSize: "11px" }}>Drive Science</button>
@@ -310,10 +367,10 @@ export default function OperatorTab({ selectedSubsystem, setSelectedSubsystem })
 
   if (selectedSubsystem === "Drive (Default)" || selectedSubsystem === "Drive") {
     const wheelGroups = [
-      { label: "Top Left Wheel", role: CAMERA_ROLES.WHEEL_TL_A },
-      { label: "Top Right Wheel", role: CAMERA_ROLES.WHEEL_TR_A },
-      { label: "Bottom Left Wheel", role: CAMERA_ROLES.WHEEL_BL_A },
-      { label: "Bottom Right Wheel", role: CAMERA_ROLES.WHEEL_BR_A },
+      { label: "Top Left Wheel", role: CAMERA_ROLES.WHEEL_TL },
+      { label: "Top Right Wheel", role: CAMERA_ROLES.WHEEL_TR },
+      { label: "Bottom Left Wheel", role: CAMERA_ROLES.WHEEL_BL },
+      { label: "Bottom Right Wheel", role: CAMERA_ROLES.WHEEL_BR },
     ];
 
     return (
@@ -355,7 +412,7 @@ export default function OperatorTab({ selectedSubsystem, setSelectedSubsystem })
           <CameraFeed
             role={CAMERA_ROLES.FRONT}
             label="Front Camera"
-            rotateDeg={cameraRotateDeg}
+            rotateDeg={getCameraRotation({ label: "Front Camera", role: CAMERA_ROLES.FRONT })}
             onClick={() => setFullscreenCam({ label: "Front Camera", role: CAMERA_ROLES.FRONT })}
             style={{ height: "100%", cursor: "pointer", border: "1px solid #3d3d3d" }}
           />
@@ -366,7 +423,7 @@ export default function OperatorTab({ selectedSubsystem, setSelectedSubsystem })
                 <CameraFeed
                   role={wheel.role}
                   label={wheel.label}
-                  rotateDeg={cameraRotateDeg}
+                  rotateDeg={getCameraRotation(wheel)}
                   onClick={() => setFullscreenCam({ label: wheel.label, role: wheel.role })}
                   style={{ flex: 1, borderRadius: 4, border: "1px solid #3d3d3d", cursor: "pointer" }}
                 />
@@ -384,7 +441,7 @@ export default function OperatorTab({ selectedSubsystem, setSelectedSubsystem })
                 key={cam.role}
                 role={cam.role}
                 label={cam.label}
-                rotateDeg={cameraRotateDeg}
+                rotateDeg={getCameraRotation(cam)}
                 onClick={() => setFullscreenCam(cam)}
                 style={{ height: "100%", cursor: "pointer", border: "1px solid #3d3d3d" }}
               />
@@ -536,7 +593,7 @@ export default function OperatorTab({ selectedSubsystem, setSelectedSubsystem })
               key={cam.role}
               role={cam.role}
               label={cam.label}
-              rotateDeg={cameraRotateDeg}
+              rotateDeg={getCameraRotation(cam)}
               onClick={() => setFullscreenCam(cam)}
               style={{ height: "100%", cursor: "pointer", border: "1px solid #3d3d3d" }}
             />
@@ -614,7 +671,7 @@ export default function OperatorTab({ selectedSubsystem, setSelectedSubsystem })
           <CameraFeed
             role={scienceCameras[0].role}
             label={scienceCameras[0].label}
-            rotateDeg={cameraRotateDeg}
+            rotateDeg={getCameraRotation(scienceCameras[0])}
             onClick={() => setFullscreenCam(scienceCameras[0])}
             style={{ height: "100%", cursor: "pointer", border: "1px solid #3d3d3d" }}
           />
@@ -624,7 +681,7 @@ export default function OperatorTab({ selectedSubsystem, setSelectedSubsystem })
                 key={cam.role}
                 role={cam.role}
                 label={cam.label}
-                rotateDeg={cameraRotateDeg}
+                rotateDeg={getCameraRotation(cam)}
                 onClick={() => setFullscreenCam(cam)}
                 style={{ height: "100%", cursor: "pointer", border: "1px solid #3d3d3d" }}
               />

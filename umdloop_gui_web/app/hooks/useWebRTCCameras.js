@@ -3,29 +3,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const RECONNECT_DELAY_MS = 2000;
-const DEFAULT_CAMERAS = [
-  { id: "0", name: "TL Wheel A", role: "wheel_tl_a" },
-  { id: "1", name: "TL Wheel B", role: "wheel_tl_b" },
-  { id: "2", name: "TR Wheel A", role: "wheel_tr_a" },
-  { id: "3", name: "TR Wheel B", role: "wheel_tr_b" },
-  { id: "4", name: "BL Wheel A", role: "wheel_bl_a" },
-  { id: "5", name: "BL Wheel B", role: "wheel_bl_b" },
-  { id: "6", name: "BR Wheel A", role: "wheel_br_a" },
-  { id: "7", name: "BR Wheel B", role: "wheel_br_b" },
-  { id: "8", name: "Arm Base", role: "arm_base" },
-  { id: "9", name: "Arm Joint", role: "arm_joint" },
-  { id: "10", name: "Arm End Effector", role: "arm_ee" },
-  { id: "11", name: "Arm Gripper", role: "arm_gripper" },
-  { id: "12", name: "Science Cam 1 / Overhead Scoops / Nightvision", role: "science_1" },
-  { id: "13", name: "Science Cam 2 / View of Scoops", role: "science_2" },
-  { id: "14", name: "Science Cam 3 / View of Sampler / Rover Field View", role: "science_3" },
-  { id: "15", name: "Front Camera", role: "front" },
-].map((camera) => ({
-  ...camera,
-  device: "default camera slot",
-  enabled: false,
-  synthetic: true,
-}));
+const LEGACY_CAMERA_ROLE_MAP = {
+  wheel_tl_a: "wheel_tl",
+  wheel_tl_b: "wheel_tl",
+  wheel_tr_a: "wheel_tr",
+  wheel_tr_b: "wheel_tr",
+  wheel_bl_a: "wheel_bl",
+  wheel_bl_b: "wheel_bl",
+  wheel_br_a: "wheel_br",
+  wheel_br_b: "wheel_br",
+};
+const DEFAULT_CAMERA_FPS = 10;
+const DEFAULT_CAMERA_QUALITY = "low";
 
 function getCameraId(message) {
   return message?.id ?? message?.cam_id ?? message?.cameraId ?? message?.camera_id ?? message?.camera;
@@ -38,21 +27,23 @@ function normalizeCamera(camera, index) {
   const id = String(rawId).trim();
   if (!id) return null;
 
-  const defaults = DEFAULT_CAMERAS.find((defaultCamera) => defaultCamera.id === id);
   const cameraConfig = typeof camera === "object" && camera != null ? camera : {};
   const config = cameraConfig.config ?? {};
+  const rawRole = cameraConfig.role ?? config.role ?? null;
+  const role = rawRole ? LEGACY_CAMERA_ROLE_MAP[rawRole] ?? rawRole : null;
 
   return {
-    ...defaults,
     ...cameraConfig,
     ...config,
     id,
-    name: cameraConfig.name ?? config.name ?? defaults?.name ?? `Camera ${id}`,
-    role: cameraConfig.role ?? config.role ?? defaults?.role ?? null,
-    device: cameraConfig.device ?? cameraConfig.path ?? defaults?.device ?? `camera ${index + 1}`,
-    capabilities: cameraConfig.capabilities ?? defaults?.capabilities ?? [],
-    enabled: Boolean(cameraConfig.enabled ?? config.enabled ?? defaults?.enabled),
-    synthetic: Boolean(cameraConfig.synthetic ?? defaults?.synthetic),
+    name: cameraConfig.name ?? config.name ?? `Camera ${id}`,
+    role,
+    device: cameraConfig.device ?? cameraConfig.path ?? `camera ${index + 1}`,
+    capabilities: cameraConfig.capabilities ?? [],
+    fps: cameraConfig.fps ?? config.fps ?? DEFAULT_CAMERA_FPS,
+    quality: cameraConfig.quality ?? config.quality ?? DEFAULT_CAMERA_QUALITY,
+    enabled: Boolean(cameraConfig.enabled ?? config.enabled),
+    synthetic: Boolean(cameraConfig.synthetic),
   };
 }
 
@@ -65,18 +56,18 @@ function normalizeCameras(message) {
     message?.available_cameras ??
     [];
 
-  if (!Array.isArray(source)) return DEFAULT_CAMERAS;
+  if (!Array.isArray(source)) return [];
 
   const normalized = source
     .map((camera, index) => normalizeCamera(camera, index))
     .filter(Boolean);
 
-  return normalized.length ? normalized : DEFAULT_CAMERAS;
+  return normalized;
 }
 
 export default function useWebRTCCameras(url) {
   const [connected, setConnected] = useState(false);
-  const [cameras, setCameras] = useState(DEFAULT_CAMERAS);
+  const [cameras, setCameras] = useState([]);
   const [streams, setStreams] = useState({});
   const [stats, setStats] = useState({});
   const [missions, setMissions] = useState([]);
@@ -234,8 +225,9 @@ export default function useWebRTCCameras(url) {
     send({ type: "rename", camera_id: id, name });
   }, [send, updateCamera]);
   const setRole = useCallback((id, role) => {
-    updateCamera(id, { role });
-    send({ type: "set_config", camera_id: id, config: { role } });
+    const normalizedRole = role ?? "";
+    updateCamera(id, { role: normalizedRole });
+    send({ type: "set_config", camera_id: id, config: { role: normalizedRole } });
   }, [send, updateCamera]);
   const setConfig = useCallback((id, config) => {
     updateCamera(id, config);

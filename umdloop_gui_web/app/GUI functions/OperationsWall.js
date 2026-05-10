@@ -17,7 +17,7 @@ const ARM_PRESETS = [
 
 const DRIVE_PRESETS = [
   { name: "Drive Default", feeds: { leftTop: CAMERA_ROLES.FRONT, leftBottom: CAMERA_ROLES.BACK, rightTop: CAMERA_ROLES.LEFT_SIDE, rightBottom: CAMERA_ROLES.RIGHT_SIDE } },
-  { name: "Drive Wheels", feeds: { leftTop: CAMERA_ROLES.WHEEL_TL_A, leftBottom: CAMERA_ROLES.WHEEL_TR_A, rightTop: CAMERA_ROLES.WHEEL_BL_A, rightBottom: CAMERA_ROLES.WHEEL_BR_A } },
+  { name: "Drive Wheels", feeds: { leftTop: CAMERA_ROLES.WHEEL_TL, leftBottom: CAMERA_ROLES.WHEEL_TR, rightTop: CAMERA_ROLES.WHEEL_BL, rightBottom: CAMERA_ROLES.WHEEL_BR } },
 ];
 
 

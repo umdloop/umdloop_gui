@@ -29,10 +29,17 @@ export function getApiBaseUrl() {
 }
 
 export function getWebRTCUrl() {
+  const envUrl = process.env.NEXT_PUBLIC_WEBRTC_WS_URL;
+
   if (typeof window !== "undefined") {
-    return window.__WEBRTC_WS_URL__ ?? "ws://localhost:8081";
+    if (window.__WEBRTC_WS_URL__) return window.__WEBRTC_WS_URL__;
+    if (envUrl) return envUrl;
+
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${protocol}//${window.location.hostname}:8081`;
   }
-  return process.env.NEXT_PUBLIC_WEBRTC_WS_URL || "ws://localhost:8081";
+
+  return envUrl || "ws://localhost:8081";
 }
 
 
