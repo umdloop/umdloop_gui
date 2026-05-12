@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=UMDLoop Monitor Pages
+Comment=Launches Chrome on two monitors for CC1 dashboard
+Exec=/home/cc1/.local/bin/umdloop-open-monitors.sh
+X-GNOME-Autostart-enabled=true
+Terminal=false
