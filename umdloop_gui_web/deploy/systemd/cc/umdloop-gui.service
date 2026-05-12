@@ -6,7 +6,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/home/umdloop/infrastructure/umdloop_gui/umdloop_gui_web
-ExecStart=/usr/bin/npx next start -p 3000
+ExecStart=/home/umdloop/.nvm/versions/node/v24.13.0/bin/npx next start -p 3000
 Restart=on-failure
 RestartSec=2
 Environment=NODE_ENV=production
