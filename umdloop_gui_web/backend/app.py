@@ -22,15 +22,11 @@ def create_app() -> FastAPI:
     )
 
     # Import and mount routers
-    from backend.cameras.router import router as cameras_router
     from backend.ros2.bridge import router as ros2_router
     from backend.radio.router import router as radio_router
     from backend.spectrum.router import router as spectrum_router
-    from backend.drone.adapter import router as drone_router
 
-    app.include_router(cameras_router)
     app.include_router(ros2_router)
-    app.include_router(drone_router)
     app.include_router(radio_router)
     app.include_router(spectrum_router)
 

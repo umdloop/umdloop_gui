@@ -1,9 +1,9 @@
 "use client";
 
 import { useSearchParams, useRouter } from "next/navigation";
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useRef, useCallback } from "react";
 import { MISSION_SYNC_URL } from "./config";
-import { MISSIONS } from "./lib/mission-mapping";
+import { MISSIONS, resolveRoleUrl } from "./lib/mission-mapping";
 
 const MISSION_LABELS = {
   delivery: "Delivery Mission",
@@ -16,6 +16,7 @@ function RootPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const monitor = searchParams.get("monitor");
+  const wsRef = useRef(null);
 
   useEffect(() => {
     if (monitor && monitor !== "slot-3") {
@@ -23,19 +24,51 @@ function RootPageContent() {
     }
   }, [monitor, router]);
 
+  // Maintain a persistent WebSocket connection to listen for mission broadcasts
+  useEffect(() => {
+    if (monitor !== "slot-3") return;
+
+    const ws = new WebSocket(MISSION_SYNC_URL);
+    wsRef.current = ws;
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === "set-mission" && data.mission) {
+          const url = resolveRoleUrl(data.mission, monitor);
+          router.replace(url);
+        }
+      } catch {
+        // Ignore malformed messages
+      }
+    };
+
+    ws.onclose = () => {
+      // Attempt reconnect after 2 seconds
+      setTimeout(() => {
+        if (wsRef.current === ws) {
+          wsRef.current = null;
+        }
+      }, 2000);
+    };
+
+    return () => {
+      ws.close();
+      wsRef.current = null;
+    };
+  }, [monitor, router]);
+
   // If not slot-3 and not yet redirected, show nothing
   if (monitor !== "slot-3") {
     return null;
   }
 
-  function handleMissionSelect(mission) {
-    // Send set-mission to Mission Sync Service
-    const ws = new WebSocket(MISSION_SYNC_URL);
-    ws.onopen = () => {
+  const handleMissionSelect = useCallback((mission) => {
+    const ws = wsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: "set-mission", mission }));
-      ws.close();
-    };
-  }
+    }
+  }, []);
 
   return (
     <div

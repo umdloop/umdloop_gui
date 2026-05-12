@@ -23,9 +23,6 @@ class Settings(BaseSettings):
     mikrotik_verify_tls: bool = False
     mikrotik_cache_ttl_sec: float = 1.5
 
-    # Drone MAVLink
-    umdloop_drone_mavlink_udp_port: int = 14550
-
     # ROS2
     rosbridge_host: str = "localhost"
     rosbridge_port: int = 9090
