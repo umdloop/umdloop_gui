@@ -8,7 +8,17 @@
  *   NEXT_PUBLIC_GUI_API_URL      - Base URL for the local Flask API (default: http://127.0.0.1:5000).
  *   NEXT_PUBLIC_USE_LOCAL_TILES  - Set to "true" to use offline tiles from public/tiles/ instead of MapTiler CDN.
  *                                  Run `python3 scripts/download_tiles.py` first to populate the tiles.
+ *   NEXT_PUBLIC_MISSION_SYNC_URL - WebSocket URL for Mission Sync Service on CC2.
+ *   NEXT_PUBLIC_ROVER_BACKEND_URL - HTTP URL for the unified Rover Backend on the Orin.
  */
+
+/** Mission Sync Service WebSocket URL (runs on CC2). */
+export const MISSION_SYNC_URL =
+  process.env.NEXT_PUBLIC_MISSION_SYNC_URL || 'ws://192.168.88.10:3001/mission-sync';
+
+/** Unified Rover Backend HTTP URL (runs on Orin). */
+export const ROVER_BACKEND_URL =
+  process.env.NEXT_PUBLIC_ROVER_BACKEND_URL || 'http://192.168.88.90:5000';
 
 export function getRosbridgeUrl() {
   if (typeof window !== "undefined") {

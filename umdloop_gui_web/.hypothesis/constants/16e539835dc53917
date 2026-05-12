@@ -1,0 +1,4 @@
+# file: /home/umdloop/umdloop_gui/umdloop_gui_web/backend/models/monitor_config.py
+# hypothesis_version: 6.150.2
+
+['cc1', 'cc2', 'slot-1', 'slot-2', 'slot-3', 'slot-4', 'slot-5']

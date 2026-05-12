@@ -1,0 +1,8 @@
+{
+  "host_id": "cc2",
+  "displays": [
+    { "x_display_index": 0, "monitor_slot": "slot-3" },
+    { "x_display_index": 1, "monitor_slot": "slot-4" },
+    { "x_display_index": 2, "monitor_slot": "slot-5" }
+  ]
+}

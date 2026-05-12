@@ -1,0 +1,14 @@
+[Unit]
+Description=UMD Loop ROS2 Bridge WebSocket (port 9090)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/bin/bash -c "source /opt/ros/humble/setup.bash && ros2 launch rosbridge_server rosbridge_websocket_launch.xml port:=9090"
+Restart=on-failure
+RestartSec=5
+Environment=ROS_DOMAIN_ID=0
+
+[Install]
+WantedBy=multi-user.target

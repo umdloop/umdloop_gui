@@ -1,0 +1,4 @@
+# file: /home/umdloop/umdloop_gui/umdloop_gui_web/backend/mission_sync/state.py
+# hypothesis_version: 6.150.2
+
+['active_mission', 'before', 'delivery', 'equipment-servicing', 'science', 'utf-8']

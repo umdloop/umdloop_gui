@@ -1,49 +1,84 @@
 "use client";
 
-import React, { useState } from "react";
-import NavigationBar from "./GUI functions/NavigationBar";
-import PageContent from "./GUI functions/PageContent";
-import SubsystemBar from "./GUI functions/SubsystemBar";
-import { MODES, NAVIGATION_BUTTONS, SUBSYSTEMS } from "./GUI functions/pageConstants";
-import { WebRTCProvider } from "./hooks/WebRTCContext";
-import { getWebRTCUrl } from "./config";
+import { useSearchParams, useRouter } from "next/navigation";
+import { Suspense, useEffect } from "react";
+import { MISSION_SYNC_URL } from "./config";
+import { MISSIONS } from "./lib/mission-mapping";
 
-export default function LoopGui() {
-  console.log("🔥 LOOP GUI RENDERED");
-  const [selectedMode, setSelectedMode] = useState(MODES[0]);
-  const [selectedSubsystem, setSelectedSubsystem] = useState(SUBSYSTEMS[0]);
-  const [selectedNavItem, setSelectedNavItem] = useState(NAVIGATION_BUTTONS[0]);
+const MISSION_LABELS = {
+  delivery: "Delivery Mission",
+  "equipment-servicing": "Equipment Servicing Mission",
+  "autonomous-navigation": "Autonomous Navigation Mission",
+  science: "Science Mission",
+};
 
-  const showSubsystemBar =
-    selectedMode !== "Science" &&
-    selectedMode !== "Navigation" &&
-    selectedMode !== "Drone" &&
-    selectedMode !== "Technician" &&
-    selectedMode !== "Map";
+function RootPageContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const monitor = searchParams.get("monitor");
+
+  useEffect(() => {
+    if (monitor && monitor !== "slot-3") {
+      router.replace(`/idle?monitor=${encodeURIComponent(monitor)}`);
+    }
+  }, [monitor, router]);
+
+  // If not slot-3 and not yet redirected, show nothing
+  if (monitor !== "slot-3") {
+    return null;
+  }
+
+  function handleMissionSelect(mission) {
+    // Send set-mission to Mission Sync Service
+    const ws = new WebSocket(MISSION_SYNC_URL);
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: "set-mission", mission }));
+      ws.close();
+    };
+  }
 
   return (
-    <WebRTCProvider url={getWebRTCUrl()}>
-      <div style={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden", background: "#1a1a1a" }}>
-        <NavigationBar selectedMode={selectedMode} setSelectedMode={setSelectedMode} />
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        height: "100vh",
+        gap: "1.5rem",
+        background: "#1a1a1a",
+      }}
+    >
+      <h1 style={{ color: "#fff", marginBottom: "2rem" }}>Select Mission</h1>
+      {MISSIONS.map((mission) => (
+        <button
+          key={mission}
+          onClick={() => handleMissionSelect(mission)}
+          style={{
+            padding: "1rem 2rem",
+            fontSize: "1.25rem",
+            borderRadius: "0.5rem",
+            border: "2px solid #444",
+            background: "#2a2a2a",
+            color: "#fff",
+            cursor: "pointer",
+            minWidth: "320px",
+            transition: "background 0.2s",
+          }}
+          onMouseOver={(e) => (e.currentTarget.style.background = "#3a3a3a")}
+          onMouseOut={(e) => (e.currentTarget.style.background = "#2a2a2a")}
+        >
+          {MISSION_LABELS[mission]}
+        </button>
+      ))}
+    </div>
+  );
+}
 
-        {showSubsystemBar ? (
-          <SubsystemBar
-            buttons={SUBSYSTEMS}
-            selected={selectedSubsystem}
-            setSelected={setSelectedSubsystem}
-          />
-        ) : null}
-
-        <div style={{ flex: 1, minHeight: 0, overflow: selectedMode === "Navigation" || selectedMode === "Technician" ? "auto" : "hidden" }}>
-          <PageContent
-            selectedMode={selectedMode}
-            selectedSubsystem={selectedSubsystem}
-            setSelectedSubsystem={setSelectedSubsystem}
-            selectedNavItem={selectedNavItem}
-            setSelectedNavItem={setSelectedNavItem}
-          />
-        </div>
-      </div>
-    </WebRTCProvider>
+export default function RootPage() {
+  return (
+    <Suspense fallback={null}>
+      <RootPageContent />
+    </Suspense>
   );
 }

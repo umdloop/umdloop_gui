@@ -1,0 +1,14 @@
+[Unit]
+Description=UMD Loop Kiosk Launcher (Chromium windows)
+After=umdloop-gui.service graphical.target
+Wants=umdloop-gui.service
+Requires=graphical.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=/bin/sleep 3
+ExecStart=/opt/umdloop/umdloop_gui_web/deploy/scripts/kiosk-launcher.sh
+
+[Install]
+WantedBy=graphical.target
