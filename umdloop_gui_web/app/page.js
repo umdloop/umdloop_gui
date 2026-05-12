@@ -58,17 +58,17 @@ function RootPageContent() {
     };
   }, [monitor, router]);
 
-  // If not slot-3 and not yet redirected, show nothing
-  if (monitor !== "slot-3") {
-    return null;
-  }
-
   const handleMissionSelect = useCallback((mission) => {
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: "set-mission", mission }));
     }
   }, []);
+
+  // If not slot-3 and not yet redirected, show nothing
+  if (monitor !== "slot-3") {
+    return null;
+  }
 
   return (
     <div

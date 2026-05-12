@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Open Monitor Pages
+Comment=Launches Chrome on three monitors for CC2 dashboard
+Exec=/home/cc2/.local/bin/open-monitors.sh
+X-GNOME-Autostart-enabled=true
+Terminal=false
