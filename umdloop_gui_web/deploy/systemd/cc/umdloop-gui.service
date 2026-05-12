@@ -5,11 +5,12 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/umdloop/umdloop_gui_web
+WorkingDirectory=/home/umdloop/infrastructure/umdloop_gui/umdloop_gui_web
 ExecStart=/usr/bin/npx next start -p 3000
 Restart=on-failure
 RestartSec=2
 Environment=NODE_ENV=production
+User=umdloop
 
 [Install]
 WantedBy=multi-user.target

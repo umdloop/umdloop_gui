@@ -5,11 +5,12 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/umdloop/umdloop_gui_web
-ExecStart=/usr/bin/python3 -m umdloop_gui_web.backend.mission_sync
+WorkingDirectory=/home/umdloop/infrastructure/umdloop_gui/umdloop_gui_web
+ExecStart=/usr/bin/python3 -m backend.mission_sync
 Restart=on-failure
 RestartSec=2
 Environment=PYTHONUNBUFFERED=1
+User=umdloop
 
 [Install]
 WantedBy=multi-user.target
