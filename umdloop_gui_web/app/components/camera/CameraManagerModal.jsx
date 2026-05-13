@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { useWebRTC } from "../context/WebRTCContext";
-import { CAMERA_ROLES } from "../config";
-import CameraFeed from "../components/camera/CameraFeed";
+import { useWebRTC } from "../../context/WebRTCContext";
+import { CAMERA_ROLES } from "../../config";
+import CameraFeed from "./CameraFeed";
 
 const ROLE_OPTIONS = [
   { value: "", label: "Unassigned" },

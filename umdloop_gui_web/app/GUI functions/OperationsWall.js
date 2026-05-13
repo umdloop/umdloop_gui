@@ -2,8 +2,8 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import ROSLIB from "roslib";
-import MapView from "./MapView";
-import CameraFeed from "./CameraFeed";
+import MapView from "../components/map/MapView";
+import CameraFeed from "../components/camera/CameraFeed";
 import { getApiBaseUrl, getRosbridgeUrl, CAMERA_ROLES } from "../config";
 import { TATTU_HV_6S_22000, buildBatteryHealthSnapshot } from "../lib/battery";
 import { getRadioStatus, sendPathPlan } from "../lib/api";

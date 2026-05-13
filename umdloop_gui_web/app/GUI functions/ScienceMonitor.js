@@ -2,10 +2,10 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import RamanPlot from "../../spectrometer/RamanPlot";
-import CameraFeed from "./CameraFeed";
-import CameraManagerModal from "./CameraManagerModal";
+import CameraFeed from "../components/camera/CameraFeed";
+import CameraManagerModal from "../components/camera/CameraManagerModal";
 import { CAMERA_ROLES, SCIENCE_SUBSYSTEMS } from "../config";
-import SubsystemBar from "./SubsystemBar";
+import SubsystemBar from "../components/layout/SubsystemBar";
 
 const RAMAN_WS_URL = "ws://localhost:5001/ws/spectrum";
 const SCIENCE_CAMERA_ROLES = [CAMERA_ROLES.SCIENCE_1, CAMERA_ROLES.SCIENCE_2, CAMERA_ROLES.SCIENCE_3];

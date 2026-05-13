@@ -2,9 +2,9 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import RamanPlot from "../../spectrometer/RamanPlot";
-import CameraFeed from "./CameraFeed";
-import CameraManagerModal from "./CameraManagerModal";
-import MissionPanel from "./MissionPanel";
+import CameraFeed from "../components/camera/CameraFeed";
+import CameraManagerModal from "../components/camera/CameraManagerModal";
+import MissionPanel from "../components/mission/MissionPanel";
 import { CAMERA_ROLES } from "../config";
 
 const RAMAN_WS_URL = "ws://localhost:5001/ws/spectrum";

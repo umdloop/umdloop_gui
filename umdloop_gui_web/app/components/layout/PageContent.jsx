@@ -1,14 +1,14 @@
 "use client";
 
 import React from "react";
-import MapView from "../components/map/MapView";
-import OperationsWall from "./OperationsWall";
-import OperatorTab from "./OperatorTab";
-import Navigation from "./Navigation";
-import ScienceMonitor from "./ScienceMonitor";
-import TechnicianDashboard from "./TechnicianDashboard";
-import SubsystemBar from "../components/layout/SubsystemBar";
-import { NAVIGATION_BUTTONS } from "../config";
+import MapView from "../map/MapView";
+import OperationsWall from "../../GUI functions/OperationsWall";
+import OperatorTab from "../../GUI functions/OperatorTab";
+import Navigation from "../../GUI functions/Navigation";
+import ScienceMonitor from "../../GUI functions/ScienceMonitor";
+import TechnicianDashboard from "../../GUI functions/TechnicianDashboard";
+import SubsystemBar from "./SubsystemBar";
+import { NAVIGATION_BUTTONS } from "../../config";
 
 export default function PageContent({
   selectedMode,
