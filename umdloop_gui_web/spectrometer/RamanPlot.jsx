@@ -50,7 +50,7 @@ function generateTestSpectrum() {
 }
 
 const RamanPlot = ({
-  wsUrl = "ws://localhost:5000/ws/spectrum",
+  wsUrl = "ws://192.168.88.90:5000/ws/spectrum",
   width = 900,
   height = 400,
   fillContainer = false,

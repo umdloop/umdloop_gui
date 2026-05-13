@@ -12,7 +12,7 @@ import Scientist2Tab2 from "./Scientist2Tab2";
 import EquipmentSpecialist from "./EquipmentSpecialist";
 import DefaultScienceView from "./DefaultScienceView";
 
-const RAMAN_WS_URL = "ws://localhost:5001/ws/spectrum";
+const RAMAN_WS_URL = "ws://192.168.88.90:5001/ws/spectrum";
 const SCIENCE_CAMERA_ROLES = [CAMERA_ROLES.SCIENCE_1, CAMERA_ROLES.SCIENCE_2, CAMERA_ROLES.SCIENCE_3];
 
 function CameraImage({ cameraId, alt, rotateDeg, style, ...imageProps }) {

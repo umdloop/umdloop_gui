@@ -6,7 +6,7 @@ import CameraFeed from "../../components/camera/CameraFeed";
 import MissionPanel from "../../components/mission/MissionPanel";
 import { CAMERA_ROLES } from "../../config";
 
-const RAMAN_WS_URL = "ws://localhost:5001/ws/spectrum";
+const RAMAN_WS_URL = "ws://192.168.88.90:5001/ws/spectrum";
 
 export default function ScienceView({
   selectedSubsystem,

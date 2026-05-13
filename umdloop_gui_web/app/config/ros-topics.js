@@ -31,6 +31,10 @@ export const TECHNICIAN_TOPICS = {
   jointStates: GUI_REQUIRED_TOPICS.jointStates,
   heading: GUI_REQUIRED_TOPICS.heading,
   diagnostics: GUI_REQUIRED_TOPICS.diagnostics,
+  motorStatus: {
+    name: process.env.NEXT_PUBLIC_GUI_MOTOR_STATUS_TOPIC || "/motor_status_controller/motor_status",
+    messageType: process.env.NEXT_PUBLIC_GUI_MOTOR_STATUS_TYPE || "msgs/msg/SystemInfo",
+  },
 };
 
 export const TECHNICIAN_COMMAND_TOPICS = {

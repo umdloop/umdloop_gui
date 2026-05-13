@@ -125,9 +125,9 @@ export default function TechnicianDashboard() {
       return Number.isFinite(numeric) ? numeric : null;
     };
 
-    ros.on("connection", () => setRosStatus("connected"));
-    ros.on("error", () => setRosStatus("error"));
-    ros.on("close", () => setRosStatus("disconnected"));
+    ros.on("connection", () => { console.log("[TechDash] ROS connected"); setRosStatus("connected"); });
+    ros.on("error", (e) => { console.log("[TechDash] ROS error", e); setRosStatus("error"); });
+    ros.on("close", () => { console.log("[TechDash] ROS closed"); setRosStatus("disconnected"); });
 
     const countBytes = (msg) => {
       try {
@@ -216,33 +216,35 @@ export default function TechnicianDashboard() {
     jointStateTopic.subscribe((msg) => {
       countBytes(msg);
       markHeartbeat("jointStates");
+      console.log("[TechDash] joint_states received, names:", msg?.name);
       const names = msg?.name || [];
       const positions = msg?.position || [];
       const velocities = msg?.velocity || [];
       const efforts = msg?.effort || [];
       const idxByPatterns = (patterns) => names.findIndex((n) => patterns.some((p) => n.toLowerCase().includes(p)));
+      const safeNum = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
       const wheelPatterns = {
-        fl: ["front_left_wheel", "wheel_fl", "fl_wheel", "left_front_wheel"],
-        fr: ["front_right_wheel", "wheel_fr", "fr_wheel", "right_front_wheel"],
-        rl: ["rear_left_wheel", "wheel_rl", "rl_wheel", "left_rear_wheel"],
-        rr: ["rear_right_wheel", "wheel_rr", "rr_wheel", "right_rear_wheel"],
+        fl: ["propulsion_fl", "front_left_wheel", "wheel_fl", "fl_wheel", "left_front_wheel"],
+        fr: ["propulsion_fr", "front_right_wheel", "wheel_fr", "fr_wheel", "right_front_wheel"],
+        rl: ["propulsion_bl", "rear_left_wheel", "wheel_rl", "rl_wheel", "left_rear_wheel", "propulsion_rl"],
+        rr: ["propulsion_br", "rear_right_wheel", "wheel_rr", "rr_wheel", "right_rear_wheel", "propulsion_rr"],
       };
       const steerPatterns = {
-        fl: ["front_left_steer", "steer_fl", "fl_steer", "left_front_steer"],
-        fr: ["front_right_steer", "steer_fr", "fr_steer", "right_front_steer"],
-        rl: ["rear_left_steer", "steer_rl", "rl_steer", "left_rear_steer"],
-        rr: ["rear_right_steer", "steer_rr", "rr_steer", "right_rear_steer"],
+        fl: ["steer_fl", "front_left_steer", "fl_steer", "left_front_steer"],
+        fr: ["steer_fr", "front_right_steer", "fr_steer", "right_front_steer"],
+        rl: ["steer_bl", "rear_left_steer", "steer_rl", "rl_steer", "left_rear_steer"],
+        rr: ["steer_br", "rear_right_steer", "steer_rr", "rr_steer", "right_rear_steer"],
       };
       const nextWheel = { fl: { velocity: 0, current: 0 }, fr: { velocity: 0, current: 0 }, rl: { velocity: 0, current: 0 }, rr: { velocity: 0, current: 0 } };
       Object.keys(wheelPatterns).forEach((key) => {
         const idx = idxByPatterns(wheelPatterns[key]);
-        if (idx >= 0) nextWheel[key] = { velocity: Number(velocities[idx] || 0), current: Number(efforts[idx] || 0) };
+        if (idx >= 0) nextWheel[key] = { velocity: safeNum(velocities[idx]), current: safeNum(efforts[idx]) };
       });
       setWheelDiag(nextWheel);
       const nextSteer = { fl: { orientationDeg: 0, current: 0 }, fr: { orientationDeg: 0, current: 0 }, rl: { orientationDeg: 0, current: 0 }, rr: { orientationDeg: 0, current: 0 } };
       Object.keys(steerPatterns).forEach((key) => {
         const idx = idxByPatterns(steerPatterns[key]);
-        if (idx >= 0) nextSteer[key] = { orientationDeg: Number((positions[idx] || 0) * (180 / Math.PI)), current: Number(efforts[idx] || 0) };
+        if (idx >= 0) nextSteer[key] = { orientationDeg: safeNum(positions[idx]) * (180 / Math.PI), current: safeNum(efforts[idx]) };
       });
       setSteerDiag(nextSteer);
     });
@@ -299,6 +301,25 @@ export default function TechnicianDashboard() {
       markTopicAvailable("diagnostics");
     });
 
+    const motorStatusTopic = new ROSLIB.Topic({
+      ros,
+      name: TECHNICIAN_TOPICS.motorStatus.name,
+      messageType: TECHNICIAN_TOPICS.motorStatus.messageType,
+    });
+    motorStatusTopic.subscribe((msg) => {
+      countBytes(msg);
+      const joints = Array.isArray(msg?.joints) ? msg.joints : [];
+      setWheelDiag((prev) => {
+        const next = { ...prev };
+        const wheelMap = { propulsion_fl: "fl", propulsion_fr: "fr", propulsion_bl: "rl", propulsion_br: "rr" };
+        joints.forEach((j) => {
+          const key = Object.keys(wheelMap).find((p) => j.joint_name?.includes(p));
+          if (key) next[wheelMap[key]] = { ...next[wheelMap[key]], current: Number.isFinite(j.torque_current) ? j.torque_current : 0 };
+        });
+        return next;
+      });
+    });
+
     const bytesInterval = setInterval(() => {
       setBytesPerSecond(byteCounter);
       byteCounter = 0;
@@ -311,6 +332,7 @@ export default function TechnicianDashboard() {
       jointStateTopic.unsubscribe();
       headingTopic.unsubscribe();
       diagnosticsTopic.unsubscribe();
+      motorStatusTopic.unsubscribe();
       if (hardStopBurstRef.current) {
         clearInterval(hardStopBurstRef.current);
         hardStopBurstRef.current = null;
@@ -418,14 +440,14 @@ export default function TechnicianDashboard() {
   const imuTelemetryFresh = topicHeartbeat.filteredImu && Date.now() - topicHeartbeat.filteredImu <= 2500;
   const headingTelemetryFresh = topicHeartbeat.heading && Date.now() - topicHeartbeat.heading <= 2500;
   const diagnosticsTelemetryFresh = topicHeartbeat.diagnostics && Date.now() - topicHeartbeat.diagnostics <= 2500;
-  const displayedWheelDiag = staleTelemetry || !jointTelemetryFresh ? { fl: { velocity: 0, current: 0 }, fr: { velocity: 0, current: 0 }, rl: { velocity: 0, current: 0 }, rr: { velocity: 0, current: 0 } } : wheelDiag;
-  const displayedSteerDiag = staleTelemetry || !jointTelemetryFresh ? { fl: { orientationDeg: 0, current: 0 }, fr: { orientationDeg: 0, current: 0 }, rl: { orientationDeg: 0, current: 0 }, rr: { orientationDeg: 0, current: 0 } } : steerDiag;
-  const displayedVelocityMps = staleTelemetry || !odomTelemetryFresh ? 0 : roverVelocityMps;
-  const displayedHeadingDeg = staleTelemetry || !headingTelemetryFresh ? null : headingDeg;
-  const displayedTilt = staleTelemetry || !imuTelemetryFresh ? { rollDeg: 0, pitchDeg: 0, magnitudeDeg: 0, vectorLabel: "CENTERED" } : tilt;
-  const displayedImuDynamics = staleTelemetry || !imuTelemetryFresh ? { yawRateDegs: 0, accelMagnitude: 0, accelState: "STEADY" } : imuDynamics;
-  const displayedDiagnosticsSummary = staleTelemetry || !diagnosticsTelemetryFresh ? { ok: 0, warn: 0, error: 0, stale: 0, topIssue: `Waiting for ${TECHNICIAN_TOPICS.diagnostics.name}` } : diagnosticsSummary;
-  const displayedDiagnosticItems = staleTelemetry || !diagnosticsTelemetryFresh ? [] : diagnosticItems;
+  const displayedWheelDiag = wheelDiag;
+  const displayedSteerDiag = steerDiag;
+  const displayedVelocityMps = roverVelocityMps;
+  const displayedHeadingDeg = headingDeg;
+  const displayedTilt = tilt;
+  const displayedImuDynamics = imuDynamics;
+  const displayedDiagnosticsSummary = diagnosticsSummary;
+  const displayedDiagnosticItems = diagnosticItems;
   const tiltWarning = displayedTilt.magnitudeDeg > 12;
   const safetyPercent = Math.max(0, Math.min(100, (displayedTilt.magnitudeDeg / 15) * 100));
   const headingLabel = displayedHeadingDeg == null ? "UNKNOWN" : ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round((((displayedHeadingDeg % 360) + 360) % 360) / 45) % 8];

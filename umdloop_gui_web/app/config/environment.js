@@ -12,9 +12,9 @@
 
 export function getRosbridgeUrl() {
   if (typeof window !== "undefined") {
-    return window.__ROSBRIDGE_WS_URL__ ?? "ws://localhost:9090";
+    return window.__ROSBRIDGE_WS_URL__ ?? process.env.NEXT_PUBLIC_ROSBRIDGE_WS_URL ?? "ws://192.168.88.90:9090";
   }
-  return process.env.NEXT_PUBLIC_ROSBRIDGE_WS_URL || "ws://localhost:9090";
+  return process.env.NEXT_PUBLIC_ROSBRIDGE_WS_URL || "ws://192.168.88.90:9090";
 }
 
 export function useLocalTiles() {
@@ -23,9 +23,9 @@ export function useLocalTiles() {
 
 export function getApiBaseUrl() {
   if (typeof window !== "undefined") {
-    return window.__GUI_API_URL__ ?? "http://127.0.0.1:5000";
+    return window.__GUI_API_URL__ ?? process.env.NEXT_PUBLIC_GUI_API_URL ?? "http://192.168.88.90:5000";
   }
-  return process.env.NEXT_PUBLIC_GUI_API_URL || "http://127.0.0.1:5000";
+  return process.env.NEXT_PUBLIC_GUI_API_URL || "http://192.168.88.90:5000";
 }
 
 export function getWebRTCUrl() {
@@ -39,5 +39,5 @@ export function getWebRTCUrl() {
     return `${protocol}//${window.location.hostname}:8081`;
   }
 
-  return envUrl || "ws://localhost:8081";
+  return envUrl || "ws://192.168.88.90:8081";
 }
