@@ -378,12 +378,6 @@ export default function TechnicianDashboard() {
 
   useEffect(() => {
     const id = setInterval(() => {
-      const intervalHours = 1.2 / 3600;
-      if (!topicAvailability.batteryDrive) {
-        setPowerStats((prev) => ({
-          batteryDrive: Math.max(0, prev.batteryDrive - ((driveLoadCurrentA * intervalHours) / TATTU_HV_6S_22000.capacityAh) * 100),
-        }));
-      }
       if (!topicAvailability.temperatures) {
         setSensorTemps((prev) => ({
           driveController: Math.max(20, Math.min(95, prev.driveController + (driveLoadCurrentA > 20 ? 0.22 : -0.08) + (Math.random() * 0.35 - 0.18))),
@@ -391,9 +385,6 @@ export default function TechnicianDashboard() {
           batteryPack: Math.max(20, Math.min(95, prev.batteryPack + (driveLoadCurrentA > 28 ? 0.16 : -0.04) + (Math.random() * 0.22 - 0.11))),
           avionics: Math.max(20, Math.min(95, prev.avionics + (Math.random() * 0.28 - 0.14))),
         }));
-      }
-      if (!topicAvailability.radio) {
-        setRadioLevel((prev) => Math.max(0, Math.min(100, prev + (Math.random() * 2.5 - 1.25))));
       }
     }, 1200);
     return () => clearInterval(id);
