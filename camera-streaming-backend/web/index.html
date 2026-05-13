@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Camera Streams</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: sans-serif; margin: 0; padding: 16px; background: #111; color: #eee; }
+
+    #status { margin-bottom: 12px; font-size: 0.9em; color: #aaa; }
+
+    /* ── Mission panel ─────────────────────────────────────────────────────── */
+    #mission-panel {
+      background: #1e1e1e;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-bottom: 20px;
+      max-width: 760px;
+    }
+    #mission-panel h2 { margin: 0 0 14px; font-size: 1em; letter-spacing: 0.05em; text-transform: uppercase; color: #ccc; }
+    .mission-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+    .mission-row label { white-space: nowrap; color: #aaa; font-size: 0.9em; }
+    .mission-row select,
+    .mission-row input[type="text"] {
+      flex: 1; min-width: 180px;
+      background: #2a2a2a; border: 1px solid #444; color: #eee;
+      padding: 5px 8px; border-radius: 4px; font-size: 0.9em;
+    }
+    .mission-row button {
+      background: #2d5a8e; border: none; color: #fff;
+      padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: 0.85em; white-space: nowrap;
+    }
+    .mission-row button:hover { background: #3a72b0; }
+    .mission-row button.danger { background: #7a2d2d; }
+    .mission-row button.danger:hover { background: #993333; }
+    #mission-status { font-size: 0.8em; color: #777; min-height: 1.2em; }
+    .active-badge {
+      display: inline-block; font-size: 0.7em; background: #2d5a8e;
+      color: #fff; border-radius: 3px; padding: 1px 5px; margin-left: 6px; vertical-align: middle;
+    }
+
+    /* ── Camera grid ───────────────────────────────────────────────────────── */
+    #cameras { display: flex; flex-wrap: wrap; gap: 16px; }
+
+    .cam-card {
+      background: #1e1e1e; border: 1px solid #333; border-radius: 8px;
+      padding: 14px; width: 520px;
+    }
+    .cam-card video { width: 100%; border-radius: 4px; background: #000; display: block; margin-bottom: 10px; }
+    .cam-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .cam-title { font-weight: bold; font-size: 1em; }
+    .cam-path  { font-size: 0.75em; color: #666; }
+    .cam-status { font-size: 0.8em; }
+    .cam-status.live { color: #4caf50; }
+    .cam-status.offline { color: #888; }
+    .cam-stats  { font-size: 0.8em; color: #aaa; min-height: 1.2em; margin-bottom: 8px; }
+
+    .ctrl-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
+    .ctrl-row label { font-size: 0.85em; color: #aaa; white-space: nowrap; }
+    .ctrl-row input[type="number"],
+    .ctrl-row input[type="text"],
+    .ctrl-row select {
+      background: #2a2a2a; border: 1px solid #444; color: #eee;
+      padding: 4px 7px; border-radius: 4px; font-size: 0.85em; width: 120px;
+    }
+    .ctrl-row select { width: auto; flex: 1; min-width: 120px; }
+    .ctrl-row button {
+      background: #333; border: 1px solid #555; color: #eee;
+      padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 0.85em;
+    }
+    .ctrl-row button:hover { background: #444; }
+    .ctrl-row button.primary { background: #2d5a8e; border-color: #2d5a8e; }
+    .ctrl-row button.primary:hover { background: #3a72b0; }
+    .ctrl-row button.danger  { background: #7a2d2d; border-color: #7a2d2d; }
+    .ctrl-row button.danger:hover  { background: #993333; }
+  </style>
+</head>
+<body>
+  <p id="status">Connecting...</p>
+
+  <!-- ── Mission Panel ─────────────────────────────────────────────────────── -->
+  <div id="mission-panel">
+    <h2>Mission Configuration</h2>
+
+    <div class="mission-row">
+      <label>Saved missions:</label>
+      <select id="mission-select">
+        <option value="">— no missions saved —</option>
+      </select>
+      <button onclick="loadSelectedMission()">Load</button>
+      <button class="danger" onclick="deleteSelectedMission()">Delete</button>
+    </div>
+
+    <div class="mission-row">
+      <label>Save current as:</label>
+      <input type="text" id="mission-name-input" placeholder="Mission name" />
+      <button onclick="saveCurrentMission()">Save Mission</button>
+    </div>
+
+    <div id="mission-status"></div>
+  </div>
+
+  <!-- ── Camera grid ───────────────────────────────────────────────────────── -->
+  <div id="cameras"></div>
+
+  <script>
+    const WS_URL   = 'ws://localhost:8081';
+    const STUN_URL = 'stun:' + new URL(WS_URL).hostname + ':3478';
+
+    const pcs     = new Map();
+    const streams = new Map();
+    let ws;
+    let missionsState = { activeMission: '', missions: [] };
+
+    function send(msg) { ws?.send(JSON.stringify(msg)); }
+
+    // ── Connection ──────────────────────────────────────────────────────────
+
+    function connect() {
+      ws = new WebSocket(WS_URL, 'webrtc-protocol');
+
+      ws.onopen = () => {
+        document.getElementById('status').textContent = 'Connected';
+      };
+
+      ws.onclose = () => {
+        document.getElementById('status').textContent = 'Disconnected — reconnecting...';
+        setTimeout(connect, 2000);
+      };
+
+      ws.onmessage = (e) => handleMessage(JSON.parse(e.data));
+    }
+
+    // ── Message handler ─────────────────────────────────────────────────────
+
+    function handleMessage(msg) {
+      switch (msg.type) {
+
+        case 'state':
+          renderCameras(msg.cameras);
+          break;
+
+        case 'missions_state':
+          missionsState = msg;
+          renderMissions(msg);
+          break;
+
+        case 'stats':
+          updateStats(msg.camera_id, msg.fps, msg.bitrate);
+          break;
+
+        case 'offer': {
+          const { id, sdp } = msg;
+          pcs.get(id)?.close();
+          const pc = new RTCPeerConnection({ iceServers: [{ urls: STUN_URL }] });
+          pcs.set(id, pc);
+
+          pc.ontrack = (e) => {
+            const stream = e.streams[0] ?? new MediaStream([e.track]);
+            streams.set(id, stream);
+            const video = document.getElementById(`video-${id}`);
+            if (video) video.srcObject = stream;
+          };
+
+          pc.onicecandidate = (e) => {
+            if (!e.candidate) return;
+            send({ type: 'ice', id, candidate: e.candidate.candidate, sdpMLineIndex: e.candidate.sdpMLineIndex });
+          };
+
+          pc.setRemoteDescription({ type: 'offer', sdp })
+            .then(() => pc.createAnswer())
+            .then((answer) => { pc.setLocalDescription(answer); send({ type: 'answer', id, sdp: answer.sdp }); })
+            .catch((err) => console.error('WebRTC offer handling failed:', err));
+          break;
+        }
+
+        case 'ice':
+          pcs.get(msg.id)
+            ?.addIceCandidate({ candidate: msg.candidate, sdpMLineIndex: msg.sdpMLineIndex })
+            .catch(() => {});
+          break;
+      }
+    }
+
+    // ── Mission panel ───────────────────────────────────────────────────────
+
+    function renderMissions(state) {
+      const sel = document.getElementById('mission-select');
+      const prevId = sel.value;
+      sel.innerHTML = '';
+
+      if (state.missions.length === 0) {
+        sel.innerHTML = '<option value="">— no missions saved —</option>';
+        return;
+      }
+
+      for (const m of state.missions) {
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = m.name + (m.id === state.activeMission ? '  ★' : '');
+        if (m.id === prevId || (prevId === '' && m.id === state.activeMission)) opt.selected = true;
+        sel.appendChild(opt);
+      }
+
+      const activeM = state.missions.find(m => m.id === state.activeMission);
+      const statusEl = document.getElementById('mission-status');
+      statusEl.textContent = activeM ? `Active: ${activeM.name}` : '';
+    }
+
+    function loadSelectedMission() {
+      const id = document.getElementById('mission-select').value;
+      if (!id) return;
+      send({ type: 'load_mission', id });
+      setMissionStatus('Mission loaded.');
+    }
+
+    function deleteSelectedMission() {
+      const id = document.getElementById('mission-select').value;
+      if (!id) return;
+      const m = missionsState.missions.find(x => x.id === id);
+      if (!confirm(`Delete mission "${m?.name ?? id}"?`)) return;
+      send({ type: 'delete_mission', id });
+    }
+
+    function saveCurrentMission() {
+      const nameInput = document.getElementById('mission-name-input');
+      const name = nameInput.value.trim();
+      if (!name) { setMissionStatus('Enter a mission name first.'); return; }
+      send({ type: 'save_mission', name });
+      nameInput.value = '';
+      setMissionStatus(`Saved as "${name}".`);
+    }
+
+    function setMissionStatus(text) {
+      const el = document.getElementById('mission-status');
+      el.textContent = text;
+      setTimeout(() => { if (el.textContent === text) el.textContent = ''; }, 3000);
+    }
+
+    // ── Camera actions ──────────────────────────────────────────────────────
+
+    function enableCamera(id)  { send({ type: 'enable',  camera_id: id }); }
+
+    function disableCamera(id) {
+      send({ type: 'disable', camera_id: id });
+      pcs.get(id)?.close();
+      pcs.delete(id);
+      streams.delete(id);
+      const video = document.getElementById(`video-${id}`);
+      if (video) video.srcObject = null;
+    }
+
+    function setConfig(id, config) { send({ type: 'set_config', camera_id: id, config }); }
+
+
+
+    // ── Camera rendering ────────────────────────────────────────────────────
+
+    function renderCameras(cameras) {
+      const container = document.getElementById('cameras');
+      container.innerHTML = '';
+      if (cameras.length === 0) {
+        container.textContent = 'No cameras detected.';
+        return;
+      }
+      for (const cam of cameras) container.appendChild(makeCameraCard(cam));
+      // Re-attach active streams lost when the DOM was rebuilt
+      for (const [id, stream] of streams) {
+        const video = document.getElementById(`video-${id}`);
+        if (video) video.srcObject = stream;
+      }
+    }
+
+    function makeCameraCard(cam) {
+      const id   = cam.id;
+      const caps = (cam.capabilities ?? []);  // already MJPEG-only from backend
+
+      const card = document.createElement('div');
+      card.className = 'cam-card';
+      card.id = `card-${id}`;
+
+      // Video element
+      const video = document.createElement('video');
+      video.id = `video-${id}`;
+      video.autoplay = true;
+      video.playsInline = true;
+      video.muted = true;
+      card.appendChild(video);
+
+      // Header row
+      const header = document.createElement('div');
+      header.className = 'cam-header';
+      const title = document.createElement('span');
+      title.className = 'cam-title';
+      title.textContent = cam.name || id;
+      const path = document.createElement('span');
+      path.className = 'cam-path';
+      path.textContent = cam.devicePath;
+      const statusSpan = document.createElement('span');
+      statusSpan.className = `cam-status ${cam.enabled ? 'live' : 'offline'}`;
+      statusSpan.id = `status-${id}`;
+      statusSpan.textContent = cam.enabled ? '● LIVE' : '○ offline';
+      header.appendChild(title);
+      header.appendChild(path);
+      header.appendChild(statusSpan);
+      card.appendChild(header);
+
+      // Stats — shows target bitrate when idle, measured when live
+      const statsEl = document.createElement('div');
+      statsEl.className = 'cam-stats';
+      statsEl.id = `stats-${id}`;
+      statsEl.textContent = `target ${(cam.bitrate / 1e6).toFixed(1)} Mbps`;
+      card.appendChild(statsEl);
+
+      // Enable/Disable
+      const toggleRow = document.createElement('div');
+      toggleRow.className = 'ctrl-row';
+      const toggleBtn = document.createElement('button');
+      toggleBtn.className = cam.enabled ? 'danger' : 'primary';
+      toggleBtn.textContent = cam.enabled ? 'Disable' : 'Enable';
+      toggleBtn.onclick = () => cam.enabled ? disableCamera(id) : enableCamera(id);
+      toggleRow.appendChild(toggleBtn);
+      card.appendChild(toggleRow);
+
+      // Rename
+      const renameRow = document.createElement('div');
+      renameRow.className = 'ctrl-row';
+      const renameLabel = document.createElement('label');
+      renameLabel.textContent = 'Rename:';
+      const nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.placeholder = 'New name';
+      const renameBtn = document.createElement('button');
+      renameBtn.textContent = 'Rename';
+      renameBtn.onclick = () => {
+        const v = nameInput.value.trim();
+        if (v) { send({ type: 'rename', camera_id: id, name: v }); nameInput.value = ''; }
+      };
+      renameRow.appendChild(renameLabel);
+      renameRow.appendChild(nameInput);
+      renameRow.appendChild(renameBtn);
+      card.appendChild(renameRow);
+
+      // Resolution selector (MJPEG only — format label omitted)
+      if (caps.length > 0) {
+        const modeRow = document.createElement('div');
+        modeRow.className = 'ctrl-row';
+        const modeLabel = document.createElement('label');
+        modeLabel.textContent = 'Resolution:';
+        const modeSelect = document.createElement('select');
+        modeSelect.id = `mode-${id}`;
+        for (const m of caps) {
+          const opt = document.createElement('option');
+          opt.value = JSON.stringify(m);
+          opt.textContent = `${m.width}×${m.height}  (max ${m.maxFps} fps)`;
+          if (m.format === cam.format && m.width === cam.width && m.height === cam.height)
+            opt.selected = true;
+          modeSelect.appendChild(opt);
+        }
+        modeRow.appendChild(modeLabel);
+        modeRow.appendChild(modeSelect);
+        card.appendChild(modeRow);
+      }
+
+      // FPS cap
+      const fpsRow = document.createElement('div');
+      fpsRow.className = 'ctrl-row';
+      const fpsLabel = document.createElement('label');
+      fpsLabel.textContent = 'FPS cap:';
+      const fpsInput = document.createElement('input');
+      fpsInput.type = 'number';
+      fpsInput.id = `fps-${id}`;
+      fpsInput.value = cam.fps;
+      fpsInput.min = 1;
+      fpsRow.appendChild(fpsLabel);
+      fpsRow.appendChild(fpsInput);
+      card.appendChild(fpsRow);
+
+      // Quality preset
+      const qualityRow = document.createElement('div');
+      qualityRow.className = 'ctrl-row';
+      const qualityLabel = document.createElement('label');
+      qualityLabel.textContent = 'Quality:';
+      const qualitySel = document.createElement('select');
+      qualitySel.id = `quality-${id}`;
+      for (const [val, lbl] of [['low','Low'],['medium','Medium'],['high','High'],['ultra','Ultra']]) {
+        const opt = document.createElement('option');
+        opt.value = val;
+        opt.textContent = lbl;
+        if (val === (cam.quality ?? 'medium')) opt.selected = true;
+        qualitySel.appendChild(opt);
+      }
+      qualityRow.appendChild(qualityLabel);
+      qualityRow.appendChild(qualitySel);
+      card.appendChild(qualityRow);
+
+      // Exposure
+      const expRow = document.createElement('div');
+      expRow.className = 'ctrl-row';
+      const autoChk = document.createElement('input');
+      autoChk.type = 'checkbox';
+      autoChk.id = `autoexp-${id}`;
+      autoChk.checked = cam.exposure < 0;
+      const autoLabel = document.createElement('label');
+      autoLabel.textContent = 'Auto exposure';
+      autoLabel.prepend(autoChk);
+      const expInput = document.createElement('input');
+      expInput.type = 'number';
+      expInput.id = `exp-${id}`;
+      expInput.value = cam.exposure < 0 ? 250 : cam.exposure;
+      expInput.min = 1;
+      expInput.placeholder = 'Exposure';
+      expRow.appendChild(autoLabel);
+      expRow.appendChild(expInput);
+      card.appendChild(expRow);
+
+      // Apply config
+      const applyRow = document.createElement('div');
+      applyRow.className = 'ctrl-row';
+      const applyBtn = document.createElement('button');
+      applyBtn.className = 'primary';
+      applyBtn.textContent = 'Apply config';
+      applyBtn.onclick = () => {
+        const config = {
+          fps:      Number(document.getElementById(`fps-${id}`).value),
+          quality:  document.getElementById(`quality-${id}`).value,
+          exposure: document.getElementById(`autoexp-${id}`).checked
+                      ? -1
+                      : Number(document.getElementById(`exp-${id}`).value),
+        };
+        const modeSel = document.getElementById(`mode-${id}`);
+        if (modeSel) {
+          const mode = JSON.parse(modeSel.value);
+          config.format = mode.format;
+          config.width  = mode.width;
+          config.height = mode.height;
+        }
+        setConfig(id, config);
+      };
+      applyRow.appendChild(applyBtn);
+      card.appendChild(applyRow);
+
+      return card;
+    }
+
+    function updateStats(cameraId, fps, bitrate) {
+      const el = document.getElementById(`stats-${cameraId}`);
+      if (el) el.textContent = `${fps.toFixed(1)} fps  ·  ${(bitrate / 1e6).toFixed(2)} Mbps measured`;
+    }
+
+    connect();
+  </script>
+</body>
+</html>

@@ -1,12 +1,11 @@
 "use client";
 
 import React, { useState } from "react";
-import NavigationBar from "./GUI functions/NavigationBar";
-import PageContent from "./GUI functions/PageContent";
-import SubsystemBar from "./GUI functions/SubsystemBar";
-import { MODES, NAVIGATION_BUTTONS, SUBSYSTEMS } from "./GUI functions/pageConstants";
-import { WebRTCProvider } from "./hooks/WebRTCContext";
-import { getWebRTCUrl } from "./config";
+import NavigationBar from "./components/layout/NavigationBar";
+import PageContent from "./components/layout/PageContent";
+import SubsystemBar from "./components/layout/SubsystemBar";
+import { MODES, NAVIGATION_BUTTONS, SUBSYSTEMS, getWebRTCUrl } from "./config";
+import { WebRTCProvider } from "./context/WebRTCContext";
 
 export default function LoopGui() {
   console.log("🔥 LOOP GUI RENDERED");

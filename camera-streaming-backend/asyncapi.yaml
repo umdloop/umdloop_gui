@@ -1,0 +1,613 @@
+asyncapi: '2.6.0'
+
+info:
+  title: Camera Streaming WebSocket API
+  version: '2.0.0'
+  description: >
+    WebSocket signaling and control API for the camera streaming backend.
+    The server listens on port 8081 using the `webrtc-protocol` WebSocket
+    subprotocol. All frames are JSON text. Only one client may be connected
+    at a time. On connect the server immediately sends `state` and
+    `missions_state` — no request is needed.
+
+servers:
+  local:
+    url: 'ws://localhost:{port}'
+    protocol: ws
+    variables:
+      port:
+        default: '8081'
+
+channels:
+  /:
+    bindings:
+      ws:
+        method: GET
+        headers:
+          type: object
+          properties:
+            Sec-WebSocket-Protocol:
+              type: string
+              enum: [webrtc-protocol]
+
+    subscribe:
+      operationId: receiveFromServer
+      message:
+        oneOf:
+          - $ref: '#/components/messages/State'
+          - $ref: '#/components/messages/MissionsState'
+          - $ref: '#/components/messages/Offer'
+          - $ref: '#/components/messages/IceServer'
+          - $ref: '#/components/messages/Stats'
+
+    publish:
+      operationId: sendToServer
+      message:
+        oneOf:
+          - $ref: '#/components/messages/Enable'
+          - $ref: '#/components/messages/Disable'
+          - $ref: '#/components/messages/Rename'
+          - $ref: '#/components/messages/SetConfig'
+          - $ref: '#/components/messages/Answer'
+          - $ref: '#/components/messages/IceClient'
+          - $ref: '#/components/messages/ListMissions'
+          - $ref: '#/components/messages/SaveMission'
+          - $ref: '#/components/messages/LoadMission'
+          - $ref: '#/components/messages/DeleteMission'
+          - $ref: '#/components/messages/SetActiveMission'
+
+components:
+
+  # ── Shared schemas ───────────────────────────────────────────────────────────
+
+  schemas:
+
+    CameraMode:
+      type: object
+      required: [format, width, height, maxFps]
+      properties:
+        format:
+          type: string
+          description: >
+            "MJPG" when the camera supports MJPEG (all MJPEG-capable cameras
+            are filtered to MJPEG-only). Raw format string (e.g. "NV12",
+            "YUYV") when the camera has no MJPEG modes.
+        width:
+          type: integer
+        height:
+          type: integer
+        maxFps:
+          type: integer
+          description: Hardware maximum framerate for this mode
+
+    Camera:
+      type: object
+      required: [id, name, role, devicePath, usbPath, enabled, format, width, height, fps, quality, bitrate, exposure, capabilities]
+      properties:
+        id:
+          type: string
+          description: Unique key used in all control messages
+        name:
+          type: string
+          description: Human-readable label; falls back to id if unset
+        role:
+          type: string
+          default: ""
+          description: >
+            Opaque GUI slot identifier. Set by the client via set_config.
+            The backend stores, persists, and broadcasts it without interpretation.
+            Does not trigger a pipeline restart.
+        devicePath:
+          type: string
+          description: >
+            Live OS device path or index (e.g. "/dev/video0", "0").
+            May change between reboots if cameras are on the same USB hub —
+            use usbPath for stable identification.
+        usbPath:
+          type: string
+          default: ""
+          description: >
+            Stable USB topology key derived from the sysfs port path
+            (e.g. "usb:1-1.2"). Constant as long as the cable stays in the
+            same physical port. Empty on macOS or for non-USB capture devices.
+        enabled:
+          type: boolean
+          description: Whether the GStreamer pipeline is currently running
+        format:
+          type: string
+          description: Active capture format
+        width:
+          type: integer
+          description: Active capture width in pixels
+        height:
+          type: integer
+          description: Active capture height in pixels
+        fps:
+          type: integer
+          description: >
+            FPS cap applied via videorate. Clamped to the maxFps of the
+            selected mode. Accurate — measured at the encoder output.
+        quality:
+          type: string
+          enum: [low, medium, high, ultra]
+          description: >
+            Encoder quality preset. Determines target bitrate as
+            bpp_factor × width × height × fps.
+            low=0.05, medium=0.10, high=0.20, ultra=0.35 bits-per-pixel.
+        bitrate:
+          type: integer
+          description: >
+            Read-only. Target bitrate in bps computed by the backend from
+            quality × resolution × fps. Do not send this field to the server;
+            send quality instead.
+        exposure:
+          type: integer
+          description: >
+            Manual shutter value for v4l2 cameras (Linux only).
+            -1 = auto. Silently ignored on macOS/AVF.
+        capabilities:
+          type: array
+          description: >
+            Capture modes advertised by the device. MJPEG-only if the device
+            has any MJPEG modes; raw modes otherwise. Sorted ascending by
+            resolution (capabilities[0] is lowest). May be empty on some
+            platforms — always guard against this before rendering a picker.
+          items:
+            $ref: '#/components/schemas/CameraMode'
+
+    ConfigPatch:
+      type: object
+      description: >
+        Partial config — only supplied fields are applied. format, width, and
+        height must always be sent together. Never send bitrate.
+        role is metadata-only and does not restart the pipeline.
+      properties:
+        role:
+          type: string
+          description: >
+            Opaque GUI slot identifier. Stored and broadcast as-is.
+            Does not restart the pipeline.
+        format:
+          type: string
+        width:
+          type: integer
+        height:
+          type: integer
+        fps:
+          type: integer
+          description: Clamped server-side to the mode's maxFps
+        quality:
+          type: string
+          enum: [low, medium, high, ultra]
+        exposure:
+          type: integer
+          description: -1 for auto; positive integer for manual (v4l2/Linux only)
+
+    MissionSummary:
+      type: object
+      required: [id, name, createdAt]
+      properties:
+        id:
+          type: string
+          description: Unique mission ID (format mission_<unix_timestamp>)
+        name:
+          type: string
+          description: Human-readable mission name
+        createdAt:
+          type: string
+          description: ISO 8601 UTC timestamp of when the mission was first saved
+
+  # ── Messages ─────────────────────────────────────────────────────────────────
+
+  messages:
+
+    # ── Server → Client ────────────────────────────────────────────────────────
+
+    State:
+      name: state
+      title: Camera State
+      summary: >
+        Full camera list. Sent on connect and after every enable, disable,
+        rename, set_config, or load_mission is processed.
+      payload:
+        type: object
+        required: [type, cameras]
+        properties:
+          type:
+            type: string
+            const: state
+          cameras:
+            type: array
+            items:
+              $ref: '#/components/schemas/Camera'
+      examples:
+        - payload:
+            type: state
+            cameras:
+              - id: camera_0
+                name: Front
+                devicePath: /dev/video0
+                enabled: true
+                format: MJPG
+                width: 640
+                height: 480
+                fps: 15
+                quality: medium
+                bitrate: 460800
+                exposure: -1
+                capabilities:
+                  - format: MJPG
+                    width: 640
+                    height: 480
+                    maxFps: 30
+                  - format: MJPG
+                    width: 1280
+                    height: 720
+                    maxFps: 30
+
+    MissionsState:
+      name: missions_state
+      title: Missions State
+      summary: >
+        Full mission list. Sent on connect and after every mission operation
+        (save, load, delete, set_active). Contains metadata only — per-camera
+        configs are not included; those are in the state message.
+      payload:
+        type: object
+        required: [type, activeMission, missions]
+        properties:
+          type:
+            type: string
+            const: missions_state
+          activeMission:
+            type: string
+            description: ID of the currently active mission, or "" if none
+          missions:
+            type: array
+            items:
+              $ref: '#/components/schemas/MissionSummary'
+      examples:
+        - payload:
+            type: missions_state
+            activeMission: mission_1746200000
+            missions:
+              - id: mission_1746200000
+                name: Competition Run 1
+                createdAt: '2026-05-02T14:30:00Z'
+              - id: mission_1746210000
+                name: Practice
+                createdAt: '2026-05-02T17:10:00Z'
+
+    Offer:
+      name: offer
+      title: SDP Offer
+      summary: >
+        WebRTC SDP offer for one camera, sent once the GStreamer pipeline is
+        ready. The client must respond with an answer message. A new offer is
+        sent any time the pipeline restarts (e.g. after set_config).
+      payload:
+        type: object
+        required: [type, id, sdp]
+        properties:
+          type:
+            type: string
+            const: offer
+          id:
+            type: string
+            description: Camera id
+          sdp:
+            type: string
+      examples:
+        - payload:
+            type: offer
+            id: camera_0
+            sdp: "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\n..."
+
+    IceServer:
+      name: ice
+      title: ICE Candidate (server → client)
+      summary: An ICE candidate generated by the server-side GStreamer pipeline.
+      payload:
+        type: object
+        required: [type, id, candidate, sdpMLineIndex]
+        properties:
+          type:
+            type: string
+            const: ice
+          id:
+            type: string
+            description: Camera id
+          candidate:
+            type: string
+          sdpMLineIndex:
+            type: integer
+      examples:
+        - payload:
+            type: ice
+            id: camera_0
+            candidate: "candidate:1 1 UDP 2013266431 192.168.1.5 5000 typ host"
+            sdpMLineIndex: 0
+
+    Stats:
+      name: stats
+      title: Pipeline Stats
+      summary: >
+        Measured stats for one active camera, emitted every 500 ms.
+        Values are measured at the h264parse output (alignment=au), so fps
+        accurately reflects the videorate cap and bitrate is the compressed
+        H.264 frame throughput (excludes RTP overhead, ~1% difference).
+      payload:
+        type: object
+        required: [type, camera_id, fps, bitrate]
+        properties:
+          type:
+            type: string
+            const: stats
+          camera_id:
+            type: string
+          fps:
+            type: number
+            description: Measured frames per second
+          bitrate:
+            type: number
+            description: Measured bits per second (H.264 frames, pre-RTP)
+      examples:
+        - payload:
+            type: stats
+            camera_id: camera_0
+            fps: 15.0
+            bitrate: 452341
+
+    # ── Client → Server ────────────────────────────────────────────────────────
+
+    Enable:
+      name: enable
+      title: Enable Camera
+      summary: >
+        Start the GStreamer pipeline for a camera. Server responds with state
+        then offer once the pipeline is ready.
+      payload:
+        type: object
+        required: [type, camera_id]
+        properties:
+          type:
+            type: string
+            const: enable
+          camera_id:
+            type: string
+      examples:
+        - payload:
+            type: enable
+            camera_id: camera_0
+
+    Disable:
+      name: disable
+      title: Disable Camera
+      summary: Stop the pipeline. Server responds with state.
+      payload:
+        type: object
+        required: [type, camera_id]
+        properties:
+          type:
+            type: string
+            const: disable
+          camera_id:
+            type: string
+      examples:
+        - payload:
+            type: disable
+            camera_id: camera_0
+
+    Rename:
+      name: rename
+      title: Rename Camera
+      summary: >
+        Assign a new id and name to a camera. Pipeline restarts if active.
+        Persisted to cameras.json. Server responds with state.
+      payload:
+        type: object
+        required: [type, camera_id, name]
+        properties:
+          type:
+            type: string
+            const: rename
+          camera_id:
+            type: string
+            description: Current camera id
+          name:
+            type: string
+            description: New name / id
+      examples:
+        - payload:
+            type: rename
+            camera_id: camera_0
+            name: front
+
+    SetConfig:
+      name: set_config
+      title: Set Camera Config
+      summary: >
+        Apply a partial configuration patch. Only present fields are updated.
+        Pipeline restarts if the camera is active and a pipeline-affecting field
+        (format, width, height, fps, quality, exposure) is changed — a new offer
+        will follow. role is metadata-only and never triggers a restart.
+        Persisted to cameras.json. Server responds with state.
+        Never include bitrate; send quality instead.
+        When changing resolution, always include format + width + height together.
+      payload:
+        type: object
+        required: [type, camera_id, config]
+        properties:
+          type:
+            type: string
+            const: set_config
+          camera_id:
+            type: string
+          config:
+            $ref: '#/components/schemas/ConfigPatch'
+      examples:
+        - payload:
+            type: set_config
+            camera_id: camera_0
+            config:
+              format: MJPG
+              width: 1280
+              height: 720
+              fps: 15
+              quality: high
+              exposure: -1
+
+    Answer:
+      name: answer
+      title: SDP Answer
+      summary: >
+        Client WebRTC answer to a server offer. Must be sent after every offer,
+        including those triggered by pipeline restarts.
+      payload:
+        type: object
+        required: [type, id, sdp]
+        properties:
+          type:
+            type: string
+            const: answer
+          id:
+            type: string
+            description: Camera id — must match the offer
+          sdp:
+            type: string
+      examples:
+        - payload:
+            type: answer
+            id: camera_0
+            sdp: "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\n..."
+
+    IceClient:
+      name: ice
+      title: ICE Candidate (client → server)
+      summary: >
+        An ICE candidate gathered by the browser RTCPeerConnection.
+        Do not send if e.candidate is null (end-of-candidates marker).
+      payload:
+        type: object
+        required: [type, id, candidate, sdpMLineIndex]
+        properties:
+          type:
+            type: string
+            const: ice
+          id:
+            type: string
+            description: Camera id
+          candidate:
+            type: string
+          sdpMLineIndex:
+            type: integer
+      examples:
+        - payload:
+            type: ice
+            id: camera_0
+            candidate: "candidate:1 1 UDP 2013266431 192.168.1.10 49152 typ host"
+            sdpMLineIndex: 0
+
+    ListMissions:
+      name: list_missions
+      title: List Missions
+      summary: Request a fresh missions_state broadcast.
+      payload:
+        type: object
+        required: [type]
+        properties:
+          type:
+            type: string
+            const: list_missions
+      examples:
+        - payload:
+            type: list_missions
+
+    SaveMission:
+      name: save_mission
+      title: Save Mission
+      summary: >
+        Snapshot the current camera configs as a named mission. If id is
+        omitted the backend generates one (mission_<unix_timestamp>). If id
+        matches an existing mission, its camera configs are overwritten but
+        createdAt is preserved. Server responds with missions_state.
+      payload:
+        type: object
+        required: [type, name]
+        properties:
+          type:
+            type: string
+            const: save_mission
+          name:
+            type: string
+            description: Human-readable mission name
+          id:
+            type: string
+            description: Optional. Omit to create new; supply to overwrite existing.
+      examples:
+        - payload:
+            type: save_mission
+            name: Competition Run 1
+
+    LoadMission:
+      name: load_mission
+      title: Load Mission
+      summary: >
+        Apply a saved mission's camera configs. Cameras not present in the
+        mission are left unchanged. Active pipelines for affected cameras are
+        restarted. Persisted to cameras.json. Sets the active mission.
+        Server responds with state then missions_state.
+      payload:
+        type: object
+        required: [type, id]
+        properties:
+          type:
+            type: string
+            const: load_mission
+          id:
+            type: string
+      examples:
+        - payload:
+            type: load_mission
+            id: mission_1746200000
+
+    DeleteMission:
+      name: delete_mission
+      title: Delete Mission
+      summary: >
+        Remove a mission permanently. If it was the active mission, active
+        mission is cleared. Server responds with missions_state.
+      payload:
+        type: object
+        required: [type, id]
+        properties:
+          type:
+            type: string
+            const: delete_mission
+          id:
+            type: string
+      examples:
+        - payload:
+            type: delete_mission
+            id: mission_1746200000
+
+    SetActiveMission:
+      name: set_active_mission
+      title: Set Active Mission
+      summary: >
+        Mark a mission as active without applying its configs. Use this to
+        track which mission is "selected" in the UI without changing any camera
+        settings. Server responds with missions_state.
+      payload:
+        type: object
+        required: [type, id]
+        properties:
+          type:
+            type: string
+            const: set_active_mission
+          id:
+            type: string
+      examples:
+        - payload:
+            type: set_active_mission
+            id: mission_1746200000

@@ -1,0 +1,73 @@
+/* Design Tokens — extracted from repeated inline values across components */
+:root {
+  /* Surface colors */
+  --color-surface-primary: #1a1a1a;
+  --color-surface-secondary: #232323;
+  --color-surface-elevated: #2b2b2b;
+  --color-surface-overlay: #222222;
+  --color-surface-input: #3d3d3d;
+  --color-surface-card: #2d2d2d;
+  --color-surface-dark: #171717;
+  --color-surface-panel: #202020;
+  --color-surface-header: #2d2d2d;
+  --color-surface-inset: #252525;
+  --color-surface-button: #303030;
+
+  /* Border colors */
+  --color-border-primary: #3d3d3d;
+  --color-border-strong: #1f1e1e;
+  --color-border-subtle: #4a4a4a;
+  --color-border-input: #555555;
+  --color-border-card: #3a3a3a;
+
+  /* Accent — danger / red */
+  --color-accent-danger: #c90202;
+  --color-accent-danger-dark: #530000;
+  --color-accent-danger-hover: #960303;
+  --color-accent-danger-muted: #8a1f1f;
+  --color-accent-danger-bg: #4a1a1a;
+  --color-accent-danger-active: #7c1919;
+  --color-accent-danger-border: #360101;
+
+  /* Accent — success / green */
+  --color-accent-success: #1f7a1f;
+  --color-accent-success-bright: #1f8f35;
+  --color-accent-success-border: #2f7d3a;
+
+  /* Accent — info / blue */
+  --color-accent-info: #1a3f6f;
+
+  /* Accent — apply / confirm */
+  --color-accent-confirm: #2a4a2a;
+
+  /* Text colors */
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #d8d8d8;
+  --color-text-muted: #a9a9a9;
+  --color-text-hint: #888888;
+  --color-text-error: #ffb3b3;
+
+  /* Border radii */
+  --radius-xs: 3px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+  --radius-2xl: 14px;
+  --radius-pill: 9999px;
+
+  /* Spacing */
+  --space-xs: 4px;
+  --space-sm: 6px;
+  --space-md: 8px;
+  --space-lg: 10px;
+  --space-xl: 12px;
+  --space-2xl: 14px;
+  --space-3xl: 16px;
+  --space-4xl: 20px;
+
+  /* Font weights */
+  --font-weight-bold: 700;
+  --font-weight-extrabold: 800;
+  --font-weight-black: 900;
+}

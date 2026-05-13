@@ -1,0 +1,31 @@
+{
+  "activeMission": "mission_1777741376",
+  "missions": {
+    "mission_1777741376": {
+      "cameras": {
+        "camera_1": {
+          "devicePath": "1",
+          "exposure": -1,
+          "format": "",
+          "fps": 30,
+          "height": 720,
+          "name": "",
+          "quality": "medium",
+          "width": 1280
+        },
+        "macbook_main": {
+          "devicePath": "0",
+          "exposure": -1,
+          "format": "",
+          "fps": 5,
+          "height": 720,
+          "name": "",
+          "quality": "low",
+          "width": 1280
+        }
+      },
+      "createdAt": "2026-05-02T17:02:56Z",
+      "name": "Testing"
+    }
+  }
+}

@@ -1,3 +1,0 @@
-set(__QT_DEPLOY_TARGET_LoopGui_FILE C:/Users/ojasp/OneDrive/Desktop/umdloop_gui-main/umdloop_gui-main/umdloop_gui_native/build/Debug/LoopGui.exe)
-set(__QT_DEPLOY_TARGET_LoopGui_TYPE EXECUTABLE)
-set(__QT_DEPLOY_TARGET_LoopGui_RUNTIME_DLLS C:/Qt/6.10.0/msvc2022_64/bin/Qt6WebSocketsd.dll;C:/Qt/6.10.0/msvc2022_64/bin/Qt6MultimediaWidgetsd.dll;C:/Qt/6.10.0/msvc2022_64/bin/Qt6Widgetsd.dll;C:/Qt/6.10.0/msvc2022_64/bin/Qt6Multimediad.dll;C:/Qt/6.10.0/msvc2022_64/bin/Qt6Networkd.dll;C:/Qt/6.10.0/msvc2022_64/bin/Qt6Concurrentd.dll;C:/Qt/6.10.0/msvc2022_64/bin/Qt6Guid.dll;C:/Qt/6.10.0/msvc2022_64/bin/Qt6Cored.dll)
