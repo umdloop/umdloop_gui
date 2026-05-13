@@ -71,7 +71,7 @@ export default function CameraFeed({ role, cameraId, label, style, rotateDeg = 0
           style={{
             width: "100%",
             height: "100%",
-            objectFit: "cover",
+            objectFit: "contain",
             transform: rotateDeg ? `rotate(${rotateDeg}deg)` : undefined,
             transformOrigin: "center center",
           }}
