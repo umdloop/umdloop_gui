@@ -3,7 +3,7 @@
 import React from "react";
 import { TATTU_HV_6S_22000 } from "../../lib/battery";
 
-export default function PowerPanel({ driveBattery, sensorTemps }) {
+export default function PowerPanel({ driveBattery }) {
   return (
     <div style={{ background: "#202020", border: "1px solid #3a3a3a", borderRadius: "12px", padding: "16px", minHeight: "220px" }}>
       <div style={{ fontSize: "26px", color: "#ffffff", marginBottom: "12px", fontWeight: 900, letterSpacing: "0.5px" }}>Power / Environment</div>
@@ -23,9 +23,7 @@ export default function PowerPanel({ driveBattery, sensorTemps }) {
           <div style={{ fontSize: "15px", color: "#9ca3af" }}>Source: fallback model</div>
         </div>
       </div>
-      <div style={{ marginTop: 10, fontSize: "20px", color: "#d8d8d8", marginBottom: "8px" }}>Temps:</div>
-      <div style={{ fontSize: "15px", color: "#9ca3af", marginBottom: "6px" }}>Temperature source: fallback model</div>
-      {Object.entries(sensorTemps).map(([k, v]) => <div key={k} style={{ fontSize: "19px", color: "#efefef", marginBottom: "4px" }}>{k}: {v.toFixed(1)} C</div>)}
+
     </div>
   );
 }

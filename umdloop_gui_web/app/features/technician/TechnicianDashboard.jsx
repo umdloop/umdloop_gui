@@ -19,7 +19,7 @@ export default function TechnicianDashboard() {
   const [timerRunning, setTimerRunning] = useState(false);
   const [ledState, setLedState] = useState("GREEN");
   const [laserWarningOn, setLaserWarningOn] = useState(false);
-  const [showCanPopup, setShowCanPopup] = useState(false);
+
   const [rosStatus, setRosStatus] = useState("connecting...");
   const [bytesPerSecond, setBytesPerSecond] = useState(0);
   const [roverVelocityMps, setRoverVelocityMps] = useState(0);
@@ -106,14 +106,6 @@ export default function TechnicianDashboard() {
     }, 1000);
     return () => clearInterval(id);
   }, [timerRunning]);
-
-  useEffect(() => {
-    const handleKey = (e) => {
-      if (e.key === "Escape") setShowCanPopup(false);
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, []);
 
   useEffect(() => {
     const ros = new ROSLIB.Ros({ url: getRosbridgeUrl() });
@@ -460,13 +452,6 @@ export default function TechnicianDashboard() {
     if (worst == null || item.ageMs > worst.ageMs) return item;
     return worst;
   }, null);
-  const canConnections = [
-    { name: "CAN0 Main Bus", percent: rosStatus === "connected" ? 97 : rosStatus === "connecting..." ? 52 : 8, detail: rosStatus === "connected" ? "Heartbeat active" : "ROS bridge not fully established" },
-    { name: "CAN1 Arm Bus", percent: Math.max(0, Math.min(100, Math.round(radioLevel))), detail: "Radio topic not published in sim; using fallback display" },
-    { name: "CAN2 Mobility Bus", percent: Math.max(10, Math.min(100, Math.round((bytesPerSecond / 1400) * 100))), detail: `Telemetry rate ${bytesPerSecond.toFixed(0)} B/s` },
-    { name: "CAN3 Instrument Bus", percent: 61, detail: "Science instrument link initialized" },
-    { name: "CAN4 Aux Bus", percent: 89, detail: "Aux power and lighting nominal" },
-  ];
   const systemChecks = [
     { name: "ROS Link", ok: rosStatus === "connected" },
     { name: "Power Bus", ok: driveBattery.packVoltageV > 22.2 },
@@ -499,7 +484,6 @@ export default function TechnicianDashboard() {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "10px", alignItems: "stretch" }}>
         <PowerPanel
           driveBattery={driveBattery}
-          sensorTemps={sensorTemps}
         />
 
         <CommsPanel
@@ -524,9 +508,6 @@ export default function TechnicianDashboard() {
           setLaserWarningOn={setLaserWarningOn}
           wheelFault={wheelFault}
           systemChecks={systemChecks}
-          showCanPopup={showCanPopup}
-          setShowCanPopup={setShowCanPopup}
-          canConnections={canConnections}
         />
       </div>
 
