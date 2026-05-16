@@ -27,14 +27,10 @@ function getDefaultTimerSeconds(missionId) {
 
 export default function TechnicianDashboard({ missionId }) {
   const defaultSeconds = getDefaultTimerSeconds(missionId);
-  const defaultMinutes = String(Math.floor(defaultSeconds / 60)).padStart(2, "0");
-  const [inputHours, setInputHours] = useState("00");
-  const [inputMinutes, setInputMinutes] = useState(defaultMinutes);
-  const [inputSeconds, setInputSeconds] = useState("00");
   const [configuredSeconds, setConfiguredSeconds] = useState(defaultSeconds);
   const [remainingSeconds, setRemainingSeconds] = useState(defaultSeconds);
   const [timerRunning, setTimerRunning] = useState(false);
-  const [extensionUsed, setExtensionUsed] = useState(false);
+  const [extensionState, setExtensionState] = useState("none");
   const [ledState, setLedState] = useState("GREEN");
   const [laserWarningOn, setLaserWarningOn] = useState(false);
 
@@ -457,16 +453,6 @@ export default function TechnicianDashboard({ missionId }) {
   const minutes = String(Math.floor((remainingSeconds % 3600) / 60)).padStart(2, "0");
   const seconds = String(remainingSeconds % 60).padStart(2, "0");
 
-  const applyTimer = () => {
-    const h = Math.max(0, parseInt(inputHours, 10) || 0);
-    const m = Math.max(0, parseInt(inputMinutes, 10) || 0);
-    const s = Math.max(0, parseInt(inputSeconds, 10) || 0);
-    const total = h * 3600 + m * 60 + s;
-    setConfiguredSeconds(total);
-    setRemainingSeconds(total);
-    setTimerRunning(false);
-  };
-
   const telemetryTopicStates = [
     { label: "Odom", key: "localizationOdom", topic: TECHNICIAN_TOPICS.localizationOdom.name },
     { label: "IMU", key: "filteredImu", topic: TECHNICIAN_TOPICS.filteredImu.name },
@@ -522,28 +508,22 @@ export default function TechnicianDashboard({ missionId }) {
         hours={hours}
         minutes={minutes}
         seconds={seconds}
-        inputHours={inputHours}
-        inputMinutes={inputMinutes}
-        inputSeconds={inputSeconds}
-        setInputHours={setInputHours}
-        setInputMinutes={setInputMinutes}
-        setInputSeconds={setInputSeconds}
         remainingSeconds={remainingSeconds}
         setTimerRunning={setTimerRunning}
         configuredSeconds={configuredSeconds}
+        setConfiguredSeconds={setConfiguredSeconds}
         setRemainingSeconds={setRemainingSeconds}
-        applyTimer={applyTimer}
         missionId={missionId}
-        extensionUsed={extensionUsed}
+        extensionState={extensionState}
         onAddExtension={() => {
           setRemainingSeconds((prev) => prev + 20 * 60);
           setConfiguredSeconds((prev) => prev + 20 * 60);
-          setExtensionUsed(true);
+          setExtensionState("added");
         }}
         onUndoExtension={() => {
           setRemainingSeconds((prev) => Math.max(0, prev - 20 * 60));
           setConfiguredSeconds((prev) => Math.max(0, prev - 20 * 60));
-          setExtensionUsed(false);
+          setExtensionState("none");
         }}
       />
 

@@ -5,9 +5,12 @@ import TechnicianDashboard from "../../features/technician/TechnicianDashboard";
 import OperatorTab from "../../features/operator/OperatorTab";
 import Navigation from "../../features/navigation/Navigation";
 import ScienceMonitor from "../../features/science/ScienceMonitor";
+import EquipmentOperatorView from "../../features/science/EquipmentOperatorView";
+import SpectrometerScientistView from "../../features/science/SpectrometerScientistView";
 import OperationsWall from "../../features/operations-wall/OperationsWall";
 import MapView from "../map/MapView";
 import SubsystemBar from "./SubsystemBar";
+import ConnectionStatusBanner from "./ConnectionStatusBanner";
 import { SUBSYSTEMS, NAVIGATION_BUTTONS } from "../../config";
 
 export default function RoleScreen({ mission, role, onBack }) {
@@ -74,6 +77,8 @@ export default function RoleScreen({ mission, role, onBack }) {
       <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
         {content}
       </div>
+
+      <ConnectionStatusBanner />
     </div>
   );
 }
@@ -134,13 +139,22 @@ function getRoleContent({ mission, role, selectedSubsystem, setSelectedSubsystem
   if (role.id === "science-equipment-operator") {
     return (
       <div style={{ height: "100%", minHeight: 0 }}>
-        <ScienceMonitor />
+        <EquipmentOperatorView />
       </div>
     );
   }
 
-  // Spectrometer Scientist / Fluorometer Scientist
-  if (role.id === "spectrometer-scientist" || role.id === "fluorometer-scientist") {
+  // Spectrometer Scientist
+  if (role.id === "spectrometer-scientist") {
+    return (
+      <div style={{ height: "100%", minHeight: 0 }}>
+        <SpectrometerScientistView />
+      </div>
+    );
+  }
+
+  // Fluorometer Scientist
+  if (role.id === "fluorometer-scientist") {
     return (
       <div style={{ height: "100%", minHeight: 0 }}>
         <ScienceMonitor />
