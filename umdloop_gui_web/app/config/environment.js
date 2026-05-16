@@ -28,6 +28,9 @@ export function getApiBaseUrl() {
   return process.env.NEXT_PUBLIC_GUI_API_URL || "http://127.0.0.1:5000";
 }
 
+// Control-channel WebSocket (port 8081) for camera enable/disable/state and
+// mission control. Media signaling no longer flows through here — see
+// getWhepBaseUrl() for the WHEP media endpoint.
 export function getWebRTCUrl() {
   const envUrl = process.env.NEXT_PUBLIC_WEBRTC_WS_URL;
 
@@ -40,4 +43,18 @@ export function getWebRTCUrl() {
   }
 
   return envUrl || "ws://localhost:8081";
+}
+
+export function getWhepBaseUrl() {
+  const envUrl = process.env.NEXT_PUBLIC_WHEP_BASE_URL;
+
+  if (typeof window !== "undefined") {
+    if (window.__WHEP_BASE_URL__) return window.__WHEP_BASE_URL__;
+    if (envUrl) return envUrl;
+
+    const protocol = window.location.protocol === "https:" ? "https:" : "http:";
+    return `${protocol}//${window.location.hostname}:8889`;
+  }
+
+  return envUrl || "http://localhost:8889";
 }

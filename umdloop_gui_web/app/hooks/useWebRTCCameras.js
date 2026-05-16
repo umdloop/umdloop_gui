@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getWhepBaseUrl } from "../config/environment";
 
 const RECONNECT_DELAY_MS = 2000;
 const LEGACY_CAMERA_ROLE_MAP = {
@@ -98,38 +99,58 @@ export default function useWebRTCCameras(url) {
     )));
   }, []);
 
-  const handleOffer = useCallback(async (message) => {
-    const id = String(getCameraId(message) ?? "");
-    const sdp = typeof message?.sdp === "string" ? message.sdp : message?.description?.sdp;
-    if (!id || !sdp) return;
+  const whepBase = getWhepBaseUrl();
 
-    pcsRef.current.get(id)?.close();
+  const stopWhep = useCallback((id) => {
+    const pc = pcsRef.current.get(id);
+    if (pc) {
+      pc.close();
+      pcsRef.current.delete(id);
+    }
+    setStreams((prev) => {
+      if (!(id in prev)) return prev;
+      const { [id]: _, ...rest } = prev;
+      return rest;
+    });
+  }, []);
+
+  const startWhep = useCallback(async (id) => {
+    if (pcsRef.current.has(id)) return;
 
     const pc = new RTCPeerConnection({ iceServers: [] });
     pcsRef.current.set(id, pc);
 
+    pc.addTransceiver("video", { direction: "recvonly" });
     pc.ontrack = (event) => {
       if (!mountedRef.current) return;
       const stream = event.streams[0] ?? new MediaStream([event.track]);
       setStreams((prev) => ({ ...prev, [id]: stream }));
     };
 
-    pc.onicecandidate = (event) => {
-      if (!event.candidate) return;
-      send({
-        type: "ice",
-        id,
-        candidate: event.candidate.candidate,
-        sdpMid: event.candidate.sdpMid,
-        sdpMLineIndex: event.candidate.sdpMLineIndex,
-      });
-    };
+    try {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
 
-    await pc.setRemoteDescription({ type: "offer", sdp });
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    send({ type: "answer", id, sdp: answer.sdp });
-  }, [send]);
+      // Backend's RTSP publish handshake can lag the WS state broadcast by
+      // a few hundred ms; retry on 404 while MediaMTX has no publisher.
+      let res;
+      for (let attempt = 0; attempt < 10; attempt++) {
+        if (!pcsRef.current.has(id)) return;
+        res = await fetch(`${whepBase}/${id}/whep`, {
+          method: "POST",
+          headers: { "Content-Type": "application/sdp" },
+          body: offer.sdp,
+        });
+        if (res.ok || res.status !== 404) break;
+        await new Promise((r) => setTimeout(r, 300));
+      }
+      if (!res?.ok) throw new Error(`WHEP ${res?.status}`);
+      await pc.setRemoteDescription({ type: "answer", sdp: await res.text() });
+    } catch (err) {
+      console.error(`WHEP start failed for ${id}:`, err);
+      stopWhep(id);
+    }
+  }, [whepBase, stopWhep]);
 
   const connect = useCallback(() => {
     if (!url || !mountedRef.current) return;
@@ -172,24 +193,6 @@ export default function useWebRTCCameras(url) {
           setMissions(msg.missions ?? []);
           setActiveMission(msg.active_mission ?? null);
           break;
-        case "offer":
-          await handleOffer(msg).catch((err) => console.error("WebRTC offer handling failed:", err));
-          break;
-        case "ice": {
-          const pc = pcsRef.current.get(String(getCameraId(msg) ?? ""));
-          if (pc) {
-            const sdpMLineIndex = msg.sdpMLineIndex ?? msg.mlineIndex;
-            const candidate = {
-              candidate: msg.candidate,
-            };
-
-            if (msg.sdpMid != null) candidate.sdpMid = msg.sdpMid;
-            if (sdpMLineIndex != null) candidate.sdpMLineIndex = sdpMLineIndex;
-
-            pc.addIceCandidate(candidate).catch(() => {});
-          }
-          break;
-        }
         case "stats": {
           const id = String(getCameraId(msg) ?? "");
           if (id) {
@@ -199,7 +202,7 @@ export default function useWebRTCCameras(url) {
         }
       }
     };
-  }, [url, closeAllPeerConnections, handleOffer]);
+  }, [url, closeAllPeerConnections]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -211,6 +214,16 @@ export default function useWebRTCCameras(url) {
       closeAllPeerConnections();
     };
   }, [connect, closeAllPeerConnections]);
+
+  useEffect(() => {
+    const enabledIds = new Set(cameras.filter((c) => c.enabled).map((c) => c.id));
+    for (const id of enabledIds) {
+      if (!pcsRef.current.has(id)) startWhep(id);
+    }
+    for (const id of [...pcsRef.current.keys()]) {
+      if (!enabledIds.has(id)) stopWhep(id);
+    }
+  }, [cameras, startWhep, stopWhep]);
 
   const enableCamera = useCallback((id) => {
     updateCamera(id, { enabled: true });
