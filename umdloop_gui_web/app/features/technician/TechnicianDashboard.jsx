@@ -10,13 +10,31 @@ import CommsPanel from "./CommsPanel";
 import MobilityPanel from "./MobilityPanel";
 import DiagnosticsPanel from "./DiagnosticsPanel";
 
-export default function TechnicianDashboard() {
+function getDefaultTimerSeconds(missionId) {
+  switch (missionId) {
+    case "delivery":
+      return 35 * 60; // 35 min
+    case "equipment-servicing":
+      return 40 * 60; // 40 min
+    case "science":
+      return 35 * 60; // 35 min
+    case "autonomous-navigation":
+      return 40 * 60; // 40 min
+    default:
+      return 10 * 60; // fallback 10 min
+  }
+}
+
+export default function TechnicianDashboard({ missionId }) {
+  const defaultSeconds = getDefaultTimerSeconds(missionId);
+  const defaultMinutes = String(Math.floor(defaultSeconds / 60)).padStart(2, "0");
   const [inputHours, setInputHours] = useState("00");
-  const [inputMinutes, setInputMinutes] = useState("10");
+  const [inputMinutes, setInputMinutes] = useState(defaultMinutes);
   const [inputSeconds, setInputSeconds] = useState("00");
-  const [configuredSeconds, setConfiguredSeconds] = useState(600);
-  const [remainingSeconds, setRemainingSeconds] = useState(600);
+  const [configuredSeconds, setConfiguredSeconds] = useState(defaultSeconds);
+  const [remainingSeconds, setRemainingSeconds] = useState(defaultSeconds);
   const [timerRunning, setTimerRunning] = useState(false);
+  const [extensionUsed, setExtensionUsed] = useState(false);
   const [ledState, setLedState] = useState("GREEN");
   const [laserWarningOn, setLaserWarningOn] = useState(false);
 
@@ -515,6 +533,18 @@ export default function TechnicianDashboard() {
         configuredSeconds={configuredSeconds}
         setRemainingSeconds={setRemainingSeconds}
         applyTimer={applyTimer}
+        missionId={missionId}
+        extensionUsed={extensionUsed}
+        onAddExtension={() => {
+          setRemainingSeconds((prev) => prev + 20 * 60);
+          setConfiguredSeconds((prev) => prev + 20 * 60);
+          setExtensionUsed(true);
+        }}
+        onUndoExtension={() => {
+          setRemainingSeconds((prev) => Math.max(0, prev - 20 * 60));
+          setConfiguredSeconds((prev) => Math.max(0, prev - 20 * 60));
+          setExtensionUsed(false);
+        }}
       />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "10px", alignItems: "stretch" }}>

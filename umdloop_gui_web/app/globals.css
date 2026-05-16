@@ -2,7 +2,7 @@
 @import "./styles/theme.css";
 
 :root {
-  --background: #ffffff;
+  --background: #1a1a1a;
   --foreground: #171717;
 }
 
@@ -15,7 +15,7 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #ffffff;
+    --background: #1a1a1a;
     --foreground: #3d3d3d;
   }
 }
@@ -25,12 +25,33 @@ body {
   height: 100%;
   margin: 0;
   padding: 0;
+  cursor: none;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Custom cursor dot that follows the pointer */
+* {
+  cursor: none !important;
+}
+
+#custom-cursor {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 12px 4px rgba(255, 255, 255, 0.4);
+  pointer-events: none;
+  z-index: 99999;
+  transform: translate(-50%, -50%);
+  transition: width 0.15s, height 0.15s, background 0.15s;
 }
 
 h1 {

@@ -17,7 +17,13 @@ export default function MissionClock({
   configuredSeconds,
   setRemainingSeconds,
   applyTimer,
+  missionId,
+  extensionUsed,
+  onAddExtension,
+  onUndoExtension,
 }) {
+  const isDelivery = missionId === "delivery";
+
   return (
     <div style={{ background: "#202020", border: "1px solid #3a3a3a", borderRadius: "12px", padding: "12px" }}>
       <div style={{ fontSize: "20px", color: "#cfcfcf", marginBottom: "8px", fontWeight: 800 }}>Mission Clock</div>
@@ -33,6 +39,44 @@ export default function MissionClock({
         <button onClick={() => setTimerRunning(false)} style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid #6a6a6a", background: "#3a3a3a", color: "white", fontWeight: 700, cursor: "pointer", fontSize: "18px" }}>Pause</button>
         <button onClick={() => { setTimerRunning(false); setRemainingSeconds(configuredSeconds); }} style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid #6a6a6a", background: "#3a3a3a", color: "white", fontWeight: 700, cursor: "pointer", fontSize: "18px" }}>Reset</button>
       </div>
+
+      {isDelivery && (
+        <div style={{ display: "flex", gap: "6px", marginTop: "10px", borderTop: "1px solid #3a3a3a", paddingTop: "10px" }}>
+          <button
+            onClick={onAddExtension}
+            disabled={extensionUsed}
+            style={{
+              padding: "6px 14px",
+              borderRadius: "6px",
+              border: extensionUsed ? "1px solid #3a3a3a" : "1px solid #4a6a9a",
+              background: extensionUsed ? "#2a2a2a" : "#2a4a7a",
+              color: extensionUsed ? "#666" : "white",
+              fontWeight: 700,
+              cursor: extensionUsed ? "not-allowed" : "pointer",
+              fontSize: "16px",
+            }}
+          >
+            +20 min
+          </button>
+          {extensionUsed && (
+            <button
+              onClick={onUndoExtension}
+              style={{
+                padding: "6px 14px",
+                borderRadius: "6px",
+                border: "1px solid #6a4a4a",
+                background: "#5a2a2a",
+                color: "white",
+                fontWeight: 700,
+                cursor: "pointer",
+                fontSize: "16px",
+              }}
+            >
+              Undo +20 min
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
