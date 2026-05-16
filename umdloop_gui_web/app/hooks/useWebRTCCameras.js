@@ -115,6 +115,7 @@ export default function useWebRTCCameras(url) {
   }, []);
 
   const startWhep = useCallback(async (id) => {
+    console.log("[whep] startWhep called", id, "alreadyHas=", pcsRef.current.has(id));
     if (pcsRef.current.has(id)) return;
 
     const pc = new RTCPeerConnection({ iceServers: [] });
@@ -122,37 +123,17 @@ export default function useWebRTCCameras(url) {
 
     pc.addTransceiver("video", { direction: "recvonly" });
     pc.ontrack = (event) => {
+      console.log("[whep] ontrack fired", id);
       if (!mountedRef.current) return;
       const stream = event.streams[0] ?? new MediaStream([event.track]);
       setStreams((prev) => ({ ...prev, [id]: stream }));
     };
+    pc.oniceconnectionstatechange = () => console.log("[whep]", id, "ice=", pc.iceConnectionState);
+    pc.onconnectionstatechange = () => console.log("[whep]", id, "conn=", pc.connectionState);
 
     try {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-
-      // MediaMTX WHEP is non-trickle: the offer must carry all ICE candidates
-      // up front, so wait for gathering to finish before POSTing. Check state
-      // inside the Promise to avoid racing the listener attachment, and cap
-      // the wait so we don't hang if the state machine misbehaves.
-      await new Promise((resolve) => {
-        if (pc.iceGatheringState === "complete") {
-          resolve();
-          return;
-        }
-        const cleanup = () => {
-          pc.removeEventListener("icegatheringstatechange", onChange);
-          clearTimeout(timer);
-        };
-        const onChange = () => {
-          if (pc.iceGatheringState === "complete") {
-            cleanup();
-            resolve();
-          }
-        };
-        const timer = setTimeout(() => { cleanup(); resolve(); }, 1500);
-        pc.addEventListener("icegatheringstatechange", onChange);
-      });
 
       // Backend's RTSP publish handshake can lag the WS state broadcast by
       // a few hundred ms; retry on 404 while MediaMTX has no publisher.
@@ -162,7 +143,7 @@ export default function useWebRTCCameras(url) {
         res = await fetch(`${whepBase}/${id}/whep`, {
           method: "POST",
           headers: { "Content-Type": "application/sdp" },
-          body: pc.localDescription.sdp,
+          body: offer.sdp,
         });
         if (res.ok || res.status !== 404) break;
         await new Promise((r) => setTimeout(r, 300));
@@ -240,6 +221,7 @@ export default function useWebRTCCameras(url) {
 
   useEffect(() => {
     const enabledIds = new Set(cameras.filter((c) => c.enabled).map((c) => c.id));
+    console.log("[whep] cameras updated. enabledIds=", [...enabledIds], "currentPcs=", [...pcsRef.current.keys()]);
     for (const id of enabledIds) {
       if (!pcsRef.current.has(id)) startWhep(id);
     }
