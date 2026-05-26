@@ -15,9 +15,21 @@ export const REGIONS = {
   },
 };
 
+const STORAGE_KEY = "active-region";
+
 export function getActiveRegionKey() {
-  if (typeof window !== "undefined" && window.__ACTIVE_REGION__) return window.__ACTIVE_REGION__;
+  if (typeof window !== "undefined") {
+    const stored = window.localStorage?.getItem(STORAGE_KEY);
+    if (stored && REGIONS[stored]) return stored;
+    if (window.__ACTIVE_REGION__) return window.__ACTIVE_REGION__;
+  }
   return process.env.NEXT_PUBLIC_ACTIVE_REGION || "umd";
+}
+
+export function setActiveRegionKey(key) {
+  if (typeof window === "undefined") return;
+  if (!REGIONS[key]) return;
+  window.localStorage?.setItem(STORAGE_KEY, key);
 }
 
 export function getActiveRegion() {

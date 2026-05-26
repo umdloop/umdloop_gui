@@ -5,7 +5,7 @@ import { Map, Marker, Source, Layer } from "react-map-gl/maplibre";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { Protocol } from "pmtiles";
-import { getActiveRegion } from "../../config";
+import { REGIONS, getActiveRegionKey, setActiveRegionKey } from "../../config";
 import { getRoverPosition } from "../../lib/api";
 
 // Register the pmtiles:// protocol with MapLibre once per page load.
@@ -35,11 +35,24 @@ export default function MapView({
 }) {
   const isControlled = externalWaypoints !== undefined;
 
-  const [viewState, setViewState] = useState({
-    longitude: -76.9378,
-    latitude: 38.9897,
-    zoom: 13,
-  });
+  const [regionKey, setRegionKey] = useState(() => getActiveRegionKey());
+  const region = REGIONS[regionKey] || REGIONS.umd;
+
+  const [viewState, setViewState] = useState(() => ({
+    longitude: region.center[0],
+    latitude: region.center[1],
+    zoom: region.zoom ?? 13,
+  }));
+
+  const handleRegionChange = useCallback((e) => {
+    const next = e.target.value;
+    setRegionKey(next);
+    setActiveRegionKey(next);
+    const r = REGIONS[next];
+    if (r) {
+      setViewState((vs) => ({ ...vs, longitude: r.center[0], latitude: r.center[1], zoom: r.zoom ?? vs.zoom }));
+    }
+  }, []);
 
   // Internal state (self-contained mode — used by Drone tab)
   const [internalWaypoints, setInternalWaypoints] = useState([]);
@@ -116,7 +129,6 @@ export default function MapView({
   const deleteWaypoint = (id) => setInternalWaypoints((prev) => prev.filter((wp) => wp.id !== id));
   const deleteAllWaypoints = () => setInternalWaypoints([]);
 
-  const region = getActiveRegion();
   ensurePmtilesProtocol();
 
   const mapStyle = {
@@ -146,6 +158,19 @@ export default function MapView({
       {/* Header */}
       <div style={{ padding: "10px 16px", background: "#2d2d2d", color: "white", display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap", flexShrink: 0 }}>
         <h1 style={{ margin: 0, fontSize: "16px", fontWeight: 700 }}>{titleOverride || `${selectedSubsystem} — Map`}</h1>
+
+        <label style={{ fontSize: "12px", display: "flex", alignItems: "center", gap: 6 }}>
+          Region
+          <select
+            value={regionKey}
+            onChange={handleRegionChange}
+            style={{ background: "#3d3d3d", color: "white", border: "1px solid #555", borderRadius: 4, padding: "3px 6px", fontSize: "12px" }}
+          >
+            {Object.entries(REGIONS).map(([key, r]) => (
+              <option key={key} value={key}>{r.label}</option>
+            ))}
+          </select>
+        </label>
 
         <div style={{ fontSize: "12px", opacity: 0.8 }}>
           GPS: <b>{displayedRosStatus}</b>
@@ -212,6 +237,7 @@ export default function MapView({
       {/* Map */}
       <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
         <Map
+          key={regionKey}
           ref={mapRef}
           {...viewState}
           onMove={(evt) => setViewState(evt.viewState)}
