@@ -35,14 +35,26 @@ export default function MapView({
 }) {
   const isControlled = externalWaypoints !== undefined;
 
-  const [regionKey, setRegionKey] = useState(() => getActiveRegionKey());
-  const region = REGIONS[regionKey] || REGIONS.umd;
+  // Initial state must match SSR: pick the first registered region, then
+  // sync to the user's saved choice (localStorage) after mount.
+  const [regionKey, setRegionKey] = useState(() => Object.keys(REGIONS)[0]);
+  const region = REGIONS[regionKey] || REGIONS[Object.keys(REGIONS)[0]];
 
   const [viewState, setViewState] = useState(() => ({
     longitude: region.center[0],
     latitude: region.center[1],
     zoom: region.zoom ?? 13,
   }));
+
+  useEffect(() => {
+    const stored = getActiveRegionKey();
+    if (stored && stored !== regionKey && REGIONS[stored]) {
+      setRegionKey(stored);
+      const r = REGIONS[stored];
+      setViewState((vs) => ({ ...vs, longitude: r.center[0], latitude: r.center[1], zoom: r.zoom ?? vs.zoom }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleRegionChange = useCallback((e) => {
     const next = e.target.value;

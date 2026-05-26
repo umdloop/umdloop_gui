@@ -3,6 +3,9 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import MiniMapHUD, { euclideanMeters } from "./MiniMapHUD";
 import { getApiBaseUrl } from "../../config";
+import { COORD_FORMATS, parseCoord } from "../../lib/coords";
+
+const COORD_FORMAT_STORAGE_KEY = "delivery-coord-format";
 
 const MAX_SPEED_MPS = 1.0;
 
@@ -57,17 +60,21 @@ function DeleteButton({ onDelete }) {
   );
 }
 
-function WaypointRow({ wp, idx, isNext, onDelete, onEdit, onMoveUp, onMoveDown, canMoveUp, canMoveDown, roverPosition }) {
+function WaypointRow({ wp, idx, isNext, onDelete, onEdit, onMoveUp, onMoveDown, canMoveUp, canMoveDown, roverPosition, coordFormat }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({ name: wp.name, lat: String(wp.latitude), lon: String(wp.longitude) });
+  const [editError, setEditError] = useState("");
 
   const distM = roverPosition ? euclideanMeters(roverPosition, wp) : null;
+  const fmt = COORD_FORMATS[coordFormat] || COORD_FORMATS.DD;
 
   const commit = () => {
-    const lat = parseFloat(draft.lat);
-    const lon = parseFloat(draft.lon);
-    if (isNaN(lat) || isNaN(lon)) return;
-    onEdit(wp.id, { name: draft.name.trim() || wp.name, latitude: lat, longitude: lon });
+    const lat = parseCoord(draft.lat, { axis: "lat", format: coordFormat });
+    const lon = parseCoord(draft.lon, { axis: "lon", format: coordFormat });
+    if (!lat.ok) { setEditError(`Lat: ${lat.error}`); return; }
+    if (!lon.ok) { setEditError(`Lon: ${lon.error}`); return; }
+    onEdit(wp.id, { name: draft.name.trim() || wp.name, latitude: lat.value, longitude: lon.value });
+    setEditError("");
     setEditing(false);
   };
 
@@ -94,9 +101,10 @@ function WaypointRow({ wp, idx, isNext, onDelete, onEdit, onMoveUp, onMoveDown, 
             style={inputStyle}
           />
           <div style={{ display: "flex", gap: 6 }}>
-            <input value={draft.lat} onChange={(e) => setDraft((d) => ({ ...d, lat: e.target.value }))} placeholder="Latitude" style={{ ...inputStyle, flex: 1 }} />
-            <input value={draft.lon} onChange={(e) => setDraft((d) => ({ ...d, lon: e.target.value }))} placeholder="Longitude" style={{ ...inputStyle, flex: 1 }} />
+            <input value={draft.lat} onChange={(e) => setDraft((d) => ({ ...d, lat: e.target.value }))} placeholder={`Lat (${fmt.placeholderLat})`} style={{ ...inputStyle, flex: 1 }} />
+            <input value={draft.lon} onChange={(e) => setDraft((d) => ({ ...d, lon: e.target.value }))} placeholder={`Lon (${fmt.placeholderLon})`} style={{ ...inputStyle, flex: 1 }} />
           </div>
+          {editError && <div style={{ color: "#f87171", fontSize: 11 }}>{editError}</div>}
           <div style={{ display: "flex", gap: 6 }}>
             <button onClick={commit} style={{ ...actionBtn, background: "#166534", flex: 1 }}>Save</button>
             <button onClick={cancel} style={{ ...actionBtn, background: "#374151", flex: 1 }}>Cancel</button>
@@ -162,8 +170,12 @@ function WaypointRow({ wp, idx, isNext, onDelete, onEdit, onMoveUp, onMoveDown, 
   );
 }
 
-export default function DeliveryMissionPanel({ waypoints, setWaypoints, roverPosition, roverHeading, onClose, portrait }) {
-  const [sortByDistance, setSortByDistance] = useState(true);
+export default function DeliveryMissionPanel({ waypoints, setWaypoints, roverPosition, roverHeading, onClose, portrait, size }) {
+  // sortMode is purely a visual indicator for which button looks "active".
+  // "By distance" is an action: it sorts waypoints once and writes that order
+  // back into state. The list/route then stay put until the user re-clicks it.
+  const [sortMode, setSortMode] = useState("manual");
+  const [coordFormat, setCoordFormatState] = useState("DD");
   const [addForm, setAddForm] = useState({ name: "", lat: "", lon: "" });
   const [addError, setAddError] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
@@ -172,9 +184,56 @@ export default function DeliveryMissionPanel({ waypoints, setWaypoints, roverPos
   const [dlStatus, setDlStatus] = useState(null);
   const [dlPolling, setDlPolling] = useState(false);
 
-  const sortedWaypoints = sortByDistance && roverPosition
-    ? [...waypoints].sort((a, b) => euclideanMeters(roverPosition, a) - euclideanMeters(roverPosition, b))
-    : waypoints;
+  useEffect(() => {
+    const saved = typeof window !== "undefined" ? localStorage.getItem(COORD_FORMAT_STORAGE_KEY) : null;
+    if (saved && COORD_FORMATS[saved]) setCoordFormatState(saved);
+  }, []);
+
+  const setCoordFormat = (next) => {
+    if (!COORD_FORMATS[next]) return;
+    setCoordFormatState(next);
+    if (typeof window !== "undefined") localStorage.setItem(COORD_FORMAT_STORAGE_KEY, next);
+  };
+
+  const fmt = COORD_FORMATS[coordFormat];
+
+  const coordFormatSelector = (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 8, padding: "8px 10px", background: "#0d1117", border: "1px solid #1f2937", borderRadius: 6 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <span style={{ color: "#9ca3af", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>Coord format:</span>
+        {Object.entries(COORD_FORMATS).map(([key, f]) => (
+          <button
+            key={key}
+            onClick={() => setCoordFormat(key)}
+            title={f.name}
+            style={{
+              padding: "3px 10px", borderRadius: 4, fontSize: 11, fontWeight: 700, cursor: "pointer",
+              border: `1px solid ${coordFormat === key ? "#1d4ed8" : "#374151"}`,
+              background: coordFormat === key ? "#1d4ed8" : "#1f2937",
+              color: coordFormat === key ? "white" : "#9ca3af",
+            }}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+      <div style={{ color: "#6b7280", fontSize: 10, lineHeight: 1.4 }}>
+        <span style={{ color: "#9ca3af" }}>{fmt.name}</span>
+        {fmt.hint && <span> — {fmt.hint}</span>}
+        <div>e.g. lat <code style={{ color: "#cbd5e1" }}>{fmt.examplesLat[0]}</code>, lon <code style={{ color: "#cbd5e1" }}>{fmt.examplesLon[0]}</code></div>
+      </div>
+    </div>
+  );
+
+  const sortByDistance = useCallback(() => {
+    if (!roverPosition) return;
+    setWaypoints((prev) =>
+      [...prev].sort((a, b) => euclideanMeters(roverPosition, a) - euclideanMeters(roverPosition, b))
+    );
+    setSortMode("distance");
+  }, [roverPosition, setWaypoints]);
+
+  const sortedWaypoints = waypoints;
 
   const nextWaypoint = sortedWaypoints[0] ?? null;
   const distToNext = nextWaypoint && roverPosition ? euclideanMeters(roverPosition, nextWaypoint) : null;
@@ -183,12 +242,12 @@ export default function DeliveryMissionPanel({ waypoints, setWaypoints, roverPos
   // ── CRUD ────────────────────────────────────────────────────────────────────
 
   const addWaypoint = () => {
-    const lat = parseFloat(addForm.lat);
-    const lon = parseFloat(addForm.lon);
+    const lat = parseCoord(addForm.lat, { axis: "lat", format: coordFormat });
+    const lon = parseCoord(addForm.lon, { axis: "lon", format: coordFormat });
     const name = addForm.name.trim() || `WP ${waypoints.length + 1}`;
-    if (isNaN(lat) || isNaN(lon)) { setAddError("Invalid coordinates"); return; }
-    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) { setAddError("Coordinates out of range"); return; }
-    setWaypoints((prev) => [...prev, { id: Date.now(), name, latitude: lat, longitude: lon }]);
+    if (!lat.ok) { setAddError(`Lat: ${lat.error}`); return; }
+    if (!lon.ok) { setAddError(`Lon: ${lon.error}`); return; }
+    setWaypoints((prev) => [...prev, { id: Date.now(), name, latitude: lat.value, longitude: lon.value }]);
     setAddForm({ name: "", lat: "", lon: "" });
     setAddError("");
     setShowAddForm(false);
@@ -210,7 +269,7 @@ export default function DeliveryMissionPanel({ waypoints, setWaypoints, roverPos
       [next[i], next[j]] = [next[j], next[i]];
       return next;
     });
-    setSortByDistance(false);
+    setSortMode("manual");
   }, [setWaypoints]);
 
   // ── Tile download ────────────────────────────────────────────────────────────
@@ -231,10 +290,22 @@ export default function DeliveryMissionPanel({ waypoints, setWaypoints, roverPos
   };
 
   const downloadArea = async () => {
-    const lat = parseFloat(centerForm.lat) || roverPosition?.latitude;
-    const lon = parseFloat(centerForm.lon) || roverPosition?.longitude;
+    let lat, lon;
+    if (centerForm.lat || centerForm.lon) {
+      const latP = parseCoord(centerForm.lat, { axis: "lat", format: coordFormat });
+      const lonP = parseCoord(centerForm.lon, { axis: "lon", format: coordFormat });
+      if (!latP.ok || !lonP.ok) {
+        setDlStatus({ error: `Invalid center: ${latP.error || lonP.error}` });
+        return;
+      }
+      lat = latP.value;
+      lon = lonP.value;
+    } else {
+      lat = roverPosition?.latitude;
+      lon = roverPosition?.longitude;
+    }
     const r = parseFloat(centerForm.radiusKm) || 2;
-    if (!lat || !lon) { setDlStatus({ error: "No coordinates — enter lat/lon or wait for GPS fix" }); return; }
+    if (lat == null || lon == null) { setDlStatus({ error: "No coordinates — enter lat/lon or wait for GPS fix" }); return; }
     await startDownload({ center: { lat, lon }, radius_km: r, min_zoom: 12, max_zoom: 18 });
   };
 
@@ -258,8 +329,8 @@ export default function DeliveryMissionPanel({ waypoints, setWaypoints, roverPos
   // Landscape: vertical panel on the right
 
   const panelStyle = portrait
-    ? { width: "100%", height: 340, borderTop: "1px solid #2a2a2a", flexDirection: "row" }
-    : { width: 300, minWidth: 300, borderLeft: "1px solid #2a2a2a", flexDirection: "column" };
+    ? { width: "100%", height: size ?? 340, flexDirection: "row" }
+    : { width: size ?? 300, minWidth: 220, flexDirection: "column" };
 
   return (
     <div style={{
@@ -304,14 +375,16 @@ export default function DeliveryMissionPanel({ waypoints, setWaypoints, roverPos
             {/* Sort + action toolbar */}
             <div style={{ display: "flex", gap: 6, padding: "8px 10px", borderBottom: "1px solid #1f2937", flexShrink: 0 }}>
               <button
-                onClick={() => setSortByDistance(true)}
-                style={{ ...actionBtn, flex: 1, background: sortByDistance ? "#1d4ed8" : "#1f2937", fontSize: 12 }}
+                onClick={sortByDistance}
+                disabled={!roverPosition}
+                title={roverPosition ? "Reorder waypoints by current distance from rover" : "No rover fix"}
+                style={{ ...actionBtn, flex: 1, background: sortMode === "distance" ? "#1d4ed8" : "#1f2937", fontSize: 12, opacity: roverPosition ? 1 : 0.5 }}
               >
                 By distance
               </button>
               <button
-                onClick={() => setSortByDistance(false)}
-                style={{ ...actionBtn, flex: 1, background: !sortByDistance ? "#1d4ed8" : "#1f2937", fontSize: 12 }}
+                onClick={() => setSortMode("manual")}
+                style={{ ...actionBtn, flex: 1, background: sortMode === "manual" ? "#1d4ed8" : "#1f2937", fontSize: 12 }}
               >
                 Manual
               </button>
@@ -330,10 +403,11 @@ export default function DeliveryMissionPanel({ waypoints, setWaypoints, roverPos
             {/* Add form (collapsible) */}
             {showAddForm && (
               <div style={{ padding: "8px 10px", borderBottom: "1px solid #1f2937", background: "#161616", flexShrink: 0 }}>
+                {coordFormatSelector}
                 <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
                   <input value={addForm.name} onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))} placeholder="Name" style={{ ...inputStyle, flex: 1 }} />
-                  <input value={addForm.lat} onChange={(e) => setAddForm((f) => ({ ...f, lat: e.target.value }))} placeholder="Lat" style={{ ...inputStyle, flex: 1 }} />
-                  <input value={addForm.lon} onChange={(e) => setAddForm((f) => ({ ...f, lon: e.target.value }))} placeholder="Lon" style={{ ...inputStyle, flex: 1 }} />
+                  <input value={addForm.lat} onChange={(e) => setAddForm((f) => ({ ...f, lat: e.target.value }))} placeholder={`Lat (${fmt.placeholderLat})`} style={{ ...inputStyle, flex: 1 }} />
+                  <input value={addForm.lon} onChange={(e) => setAddForm((f) => ({ ...f, lon: e.target.value }))} placeholder={`Lon (${fmt.placeholderLon})`} style={{ ...inputStyle, flex: 1 }} />
                   <button onClick={addWaypoint} style={{ ...actionBtn, background: "#065f46", minWidth: 52 }}>Add</button>
                 </div>
                 {addError && <div style={{ color: "#f87171", fontSize: 11 }}>{addError}</div>}
@@ -344,8 +418,8 @@ export default function DeliveryMissionPanel({ waypoints, setWaypoints, roverPos
             {showTileCache && (
               <div style={{ padding: "8px 10px", borderBottom: "1px solid #1f2937", background: "#0d1117", flexShrink: 0 }}>
                 <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  <input value={centerForm.lat} onChange={(e) => setCenterForm((f) => ({ ...f, lat: e.target.value }))} placeholder="Lat" style={{ ...inputStyle, flex: 1 }} />
-                  <input value={centerForm.lon} onChange={(e) => setCenterForm((f) => ({ ...f, lon: e.target.value }))} placeholder="Lon" style={{ ...inputStyle, flex: 1 }} />
+                  <input value={centerForm.lat} onChange={(e) => setCenterForm((f) => ({ ...f, lat: e.target.value }))} placeholder={`Lat (${fmt.placeholderLat})`} style={{ ...inputStyle, flex: 1 }} />
+                  <input value={centerForm.lon} onChange={(e) => setCenterForm((f) => ({ ...f, lon: e.target.value }))} placeholder={`Lon (${fmt.placeholderLon})`} style={{ ...inputStyle, flex: 1 }} />
                   <input value={centerForm.radiusKm} onChange={(e) => setCenterForm((f) => ({ ...f, radiusKm: e.target.value }))} placeholder="km" style={{ ...inputStyle, width: 48 }} />
                   <button onClick={downloadArea} disabled={dlStatus?.running} style={{ ...actionBtn, background: dlStatus?.running ? "#374151" : "#0f766e", minWidth: 70 }}>
                     {dlStatus?.running ? "…" : "Cache"}
@@ -368,6 +442,7 @@ export default function DeliveryMissionPanel({ waypoints, setWaypoints, roverPos
                   onMoveUp={() => moveWaypoint(wp.id, -1)} onMoveDown={() => moveWaypoint(wp.id, 1)}
                   canMoveUp={idx > 0} canMoveDown={idx < sortedWaypoints.length - 1}
                   roverPosition={roverPosition}
+                  coordFormat={coordFormat}
                 />
               ))}
               {waypoints.length > 0 && (
@@ -408,10 +483,10 @@ export default function DeliveryMissionPanel({ waypoints, setWaypoints, roverPos
 
             {/* Sort toggle */}
             <div style={{ display: "flex", gap: 6 }}>
-              <button onClick={() => setSortByDistance(true)} style={{ ...actionBtn, flex: 1, background: sortByDistance ? "#1d4ed8" : "#1f2937" }}>
+              <button onClick={sortByDistance} disabled={!roverPosition} style={{ ...actionBtn, flex: 1, background: sortMode === "distance" ? "#1d4ed8" : "#1f2937", opacity: roverPosition ? 1 : 0.5 }}>
                 By distance
               </button>
-              <button onClick={() => setSortByDistance(false)} style={{ ...actionBtn, flex: 1, background: !sortByDistance ? "#1d4ed8" : "#1f2937" }}>
+              <button onClick={() => setSortMode("manual")} style={{ ...actionBtn, flex: 1, background: sortMode === "manual" ? "#1d4ed8" : "#1f2937" }}>
                 Manual order
               </button>
             </div>
@@ -429,6 +504,7 @@ export default function DeliveryMissionPanel({ waypoints, setWaypoints, roverPos
                   onMoveUp={() => moveWaypoint(wp.id, -1)} onMoveDown={() => moveWaypoint(wp.id, 1)}
                   canMoveUp={idx > 0} canMoveDown={idx < sortedWaypoints.length - 1}
                   roverPosition={roverPosition}
+                  coordFormat={coordFormat}
                 />
               ))}
             </div>
@@ -443,10 +519,11 @@ export default function DeliveryMissionPanel({ waypoints, setWaypoints, roverPos
               </button>
               {showAddForm && (
                 <>
+                  {coordFormatSelector}
                   <input value={addForm.name} onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))} placeholder="Name (optional)" style={{ ...inputStyle, width: "100%", marginBottom: 6, boxSizing: "border-box" }} />
                   <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
-                    <input value={addForm.lat} onChange={(e) => setAddForm((f) => ({ ...f, lat: e.target.value }))} placeholder="Latitude" style={{ ...inputStyle, flex: 1 }} />
-                    <input value={addForm.lon} onChange={(e) => setAddForm((f) => ({ ...f, lon: e.target.value }))} placeholder="Longitude" style={{ ...inputStyle, flex: 1 }} />
+                    <input value={addForm.lat} onChange={(e) => setAddForm((f) => ({ ...f, lat: e.target.value }))} placeholder={`Lat (${fmt.placeholderLat})`} style={{ ...inputStyle, flex: 1 }} />
+                    <input value={addForm.lon} onChange={(e) => setAddForm((f) => ({ ...f, lon: e.target.value }))} placeholder={`Lon (${fmt.placeholderLon})`} style={{ ...inputStyle, flex: 1 }} />
                   </div>
                   {addError && <div style={{ color: "#f87171", fontSize: 12, marginBottom: 6 }}>{addError}</div>}
                   <button onClick={addWaypoint} style={{ ...actionBtn, background: "#065f46", width: "100%" }}>Add Waypoint</button>
@@ -473,8 +550,8 @@ export default function DeliveryMissionPanel({ waypoints, setWaypoints, roverPos
               {showTileCache && (
                 <>
                   <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
-                    <input value={centerForm.lat} onChange={(e) => setCenterForm((f) => ({ ...f, lat: e.target.value }))} placeholder="Lat" style={{ ...inputStyle, flex: 1 }} />
-                    <input value={centerForm.lon} onChange={(e) => setCenterForm((f) => ({ ...f, lon: e.target.value }))} placeholder="Lon" style={{ ...inputStyle, flex: 1 }} />
+                    <input value={centerForm.lat} onChange={(e) => setCenterForm((f) => ({ ...f, lat: e.target.value }))} placeholder={`Lat (${fmt.placeholderLat})`} style={{ ...inputStyle, flex: 1 }} />
+                    <input value={centerForm.lon} onChange={(e) => setCenterForm((f) => ({ ...f, lon: e.target.value }))} placeholder={`Lon (${fmt.placeholderLon})`} style={{ ...inputStyle, flex: 1 }} />
                     <input value={centerForm.radiusKm} onChange={(e) => setCenterForm((f) => ({ ...f, radiusKm: e.target.value }))} placeholder="km" style={{ ...inputStyle, width: 48 }} />
                   </div>
                   <button

@@ -9,6 +9,7 @@ import EquipmentOperatorView from "../../features/science/EquipmentOperatorView"
 import SpectrometerScientistView from "../../features/science/SpectrometerScientistView";
 import OperationsWall from "../../features/operations-wall/OperationsWall";
 import MapView from "../map/MapView";
+import MapDeliveryView from "./MapDeliveryView";
 import SubsystemBar from "./SubsystemBar";
 import ConnectionStatusBanner from "./ConnectionStatusBanner";
 import { SUBSYSTEMS, NAVIGATION_BUTTONS } from "../../config";
@@ -107,8 +108,18 @@ function getRoleContent({ mission, role, selectedSubsystem, setSelectedSubsystem
     );
   }
 
-  // Navigator maps to the existing navigation feature
+  // Navigator: delivery mission gets the waypoint map; autonomous nav keeps
+  // the Object Detection / Control Panel view.
   if (role.id === "navigator") {
+    if (mission.id === "delivery") {
+      return (
+        <div style={{ height: "100%", minHeight: 0, padding: "10px" }}>
+          <div style={{ border: "1px solid #333", borderRadius: "10px", overflow: "hidden", height: "100%" }}>
+            <MapDeliveryView selectedSubsystem={selectedSubsystem} />
+          </div>
+        </div>
+      );
+    }
     return (
       <div style={{ minHeight: 0, height: "100%", padding: "10px" }}>
         <div style={{ border: "1px solid #333", borderRadius: "10px", overflow: "hidden", background: "#1f1f1f", height: "100%", display: "flex", flexDirection: "column" }}>

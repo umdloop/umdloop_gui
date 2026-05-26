@@ -11,10 +11,13 @@
  */
 
 export function getRosbridgeUrl() {
+  const envUrl = process.env.NEXT_PUBLIC_ROSBRIDGE_WS_URL;
   if (typeof window !== "undefined") {
-    return window.__ROSBRIDGE_WS_URL__ ?? process.env.NEXT_PUBLIC_ROSBRIDGE_WS_URL ?? "ws://192.168.88.90:9090";
+    if (window.__ROSBRIDGE_WS_URL__) return window.__ROSBRIDGE_WS_URL__;
+    if (envUrl) return envUrl;
+    return `ws://${window.location.hostname}:9090`;
   }
-  return process.env.NEXT_PUBLIC_ROSBRIDGE_WS_URL || "ws://192.168.88.90:9090";
+  return envUrl || "ws://127.0.0.1:9090";
 }
 
 export function useLocalTiles() {
@@ -22,10 +25,14 @@ export function useLocalTiles() {
 }
 
 export function getApiBaseUrl() {
+  const envUrl = process.env.NEXT_PUBLIC_GUI_API_URL;
   if (typeof window !== "undefined") {
-    return window.__GUI_API_URL__ ?? process.env.NEXT_PUBLIC_GUI_API_URL ?? "http://192.168.88.90:5000";
+    if (window.__GUI_API_URL__) return window.__GUI_API_URL__;
+    if (envUrl) return envUrl;
+    const protocol = window.location.protocol === "https:" ? "https:" : "http:";
+    return `${protocol}//${window.location.hostname}:5000`;
   }
-  return process.env.NEXT_PUBLIC_GUI_API_URL || "http://192.168.88.90:5000";
+  return envUrl || "http://127.0.0.1:5000";
 }
 
 // Control-channel WebSocket (port 8081) for camera enable/disable/state and
