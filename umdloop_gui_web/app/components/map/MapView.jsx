@@ -2,9 +2,20 @@
 
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import { Map, Marker, Source, Layer } from "react-map-gl/maplibre";
+import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { getApiBaseUrl } from "../../config";
+import { Protocol } from "pmtiles";
+import { getActiveRegion } from "../../config";
 import { getRoverPosition } from "../../lib/api";
+
+// Register the pmtiles:// protocol with MapLibre once per page load.
+let pmtilesProtocolRegistered = false;
+function ensurePmtilesProtocol() {
+  if (pmtilesProtocolRegistered) return;
+  const protocol = new Protocol();
+  maplibregl.addProtocol("pmtiles", protocol.tile);
+  pmtilesProtocolRegistered = true;
+}
 
 // heading (radians, ROS: 0=East CCW) → CSS rotate degrees for an up-pointing arrow
 function headingToCssRotate(rad) {
@@ -105,14 +116,15 @@ export default function MapView({
   const deleteWaypoint = (id) => setInternalWaypoints((prev) => prev.filter((wp) => wp.id !== id));
   const deleteAllWaypoints = () => setInternalWaypoints([]);
 
-  const tileUrl = `${getApiBaseUrl()}/tiles/{z}/{x}/{y}.jpg`;
+  const region = getActiveRegion();
+  ensurePmtilesProtocol();
 
   const mapStyle = {
     version: 8,
     sources: {
       satellite: {
         type: "raster",
-        tiles: [tileUrl],
+        url: `pmtiles://${region.pmtiles}`,
         tileSize: 256,
         attribution: "© MapTiler © OpenStreetMap contributors",
       },

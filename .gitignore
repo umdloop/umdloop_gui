@@ -47,3 +47,7 @@ umdloop_gui_web/.vercel
 # typescript
 umdloop_gui_web/*.tsbuildinfo
 umdloop_gui_web/next-env.d.ts
+
+# Raw Z/X/Y tiles are a build-staging area for scripts/build_pmtiles.py.
+# The committed artifact is umdloop_gui_web/public/regions/*.pmtiles (LFS).
+umdloop_gui_web/public/tiles/
