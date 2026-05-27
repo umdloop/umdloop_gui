@@ -1,17 +1,20 @@
 import base64
 import json
+import math
 import os
 import re
 import signal
 import ssl
 import subprocess
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from urllib import error as urllib_error
 from urllib import request as urllib_request
 
 import cv2
-from flask import Flask, Response, jsonify, request
+from flask import Flask, Response, jsonify, request, send_file
 from flask_cors import CORS
 from ultralytics import YOLO
 from ros_bridge import ros_context
@@ -20,6 +23,85 @@ from ros_bridge import ros_context
 app = Flask(__name__)
 CORS(app)
 process = None
+
+# ── Tile proxy / offline cache ─────────────────────────────────────────────────
+
+MAPTILER_KEY = os.getenv("MAPTILER_KEY", "DDQqKsPBfdOZOVxgcoy5")
+_TILES_DIR = os.path.join(os.path.dirname(__file__), "public", "tiles")
+
+_download_lock = threading.Lock()
+_download_state = {"running": False, "downloaded": 0, "skipped": 0, "total": 0, "errors": 0, "message": ""}
+
+
+def _lat_lon_to_tile(lat, lon, zoom):
+    n = 2 ** zoom
+    x = int((lon + 180.0) / 360.0 * n)
+    lat_rad = math.radians(lat)
+    y = int((1.0 - math.asinh(math.tan(lat_rad)) / math.pi) / 2.0 * n)
+    return x, y
+
+
+def _tile_range(min_lat, min_lon, max_lat, max_lon, zoom):
+    x_min, y_max = _lat_lon_to_tile(min_lat, min_lon, zoom)
+    x_max, y_min = _lat_lon_to_tile(max_lat, max_lon, zoom)
+    return x_min, x_max, y_min, y_max
+
+
+def _bbox_from_center_radius(lat, lon, radius_km):
+    delta_lat = radius_km / 111.32
+    delta_lon = radius_km / (111.32 * math.cos(math.radians(lat)))
+    return lat - delta_lat, lat + delta_lat, lon - delta_lon, lon + delta_lon
+
+
+def _download_worker(min_lat, max_lat, min_lon, max_lon, min_zoom, max_zoom):
+    tasks = []
+    for z in range(min_zoom, max_zoom + 1):
+        x_min, x_max, y_min, y_max = _tile_range(min_lat, min_lon, max_lat, max_lon, z)
+        for x in range(x_min, x_max + 1):
+            for y in range(y_min, y_max + 1):
+                out_path = os.path.join(_TILES_DIR, str(z), str(x), f"{y}.jpg")
+                url = f"https://api.maptiler.com/tiles/satellite/{z}/{x}/{y}.jpg?key={MAPTILER_KEY}"
+                tasks.append((url, out_path))
+
+    with _download_lock:
+        _download_state.update({"running": True, "downloaded": 0, "skipped": 0, "total": len(tasks), "errors": 0, "message": "Downloading…"})
+
+    downloaded = skipped = errors = 0
+
+    def fetch(args):
+        url, out_path = args
+        if os.path.exists(out_path) and os.path.getsize(out_path) > 0:
+            return "skip"
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+        tmp = out_path + ".tmp"
+        try:
+            with urllib_request.urlopen(url, timeout=8) as resp:
+                data = resp.read()
+            with open(tmp, "wb") as f:
+                f.write(data)
+            os.replace(tmp, out_path)
+            return "ok"
+        except Exception:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+            return "error"
+
+    with ThreadPoolExecutor(max_workers=12) as pool:
+        for result in pool.map(fetch, tasks):
+            if result == "skip":
+                skipped += 1
+            elif result == "ok":
+                downloaded += 1
+            else:
+                errors += 1
+            with _download_lock:
+                _download_state.update({"downloaded": downloaded, "skipped": skipped, "errors": errors})
+
+    with _download_lock:
+        _download_state.update({"running": False, "message": f"Done — {downloaded} new, {skipped} cached, {errors} errors"})
+
+
+# ── MikroTik ───────────────────────────────────────────────────────────────────
 
 MIKROTIK_HOST = os.getenv("MIKROTIK_HOST", "").strip()
 MIKROTIK_USER = os.getenv("MIKROTIK_USER", "").strip()
@@ -380,6 +462,61 @@ def navigation_path_plan():
         "goal_sent": False,
         "message": "nav_mode published; no GNSS goal sent for ObjectDetection"
     })
+
+
+@app.get("/tiles/<int:z>/<int:x>/<int:y>.jpg")
+def serve_tile(z, x, y):
+    local_path = os.path.join(_TILES_DIR, str(z), str(x), f"{y}.jpg")
+    if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
+        return send_file(local_path, mimetype="image/jpeg")
+    url = f"https://api.maptiler.com/tiles/satellite/{z}/{x}/{y}.jpg?key={MAPTILER_KEY}"
+    try:
+        with urllib_request.urlopen(url, timeout=5) as resp:
+            data = resp.read()
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        tmp = local_path + ".tmp"
+        with open(tmp, "wb") as f:
+            f.write(data)
+        os.replace(tmp, local_path)  # atomic on POSIX; avoids serving partial writes
+        return Response(data, mimetype="image/jpeg")
+    except Exception:
+        return "", 404
+
+
+@app.post("/tiles/download")
+def start_tile_download():
+    if _download_state["running"]:
+        return jsonify({"ok": False, "error": "Download already in progress"}), 409
+    body = request.get_json(silent=True) or {}
+    try:
+        if "center" in body:
+            c = body["center"]
+            radius_km = float(body.get("radius_km", 2.0))
+            min_lat, max_lat, min_lon, max_lon = _bbox_from_center_radius(
+                float(c["lat"]), float(c["lon"]), radius_km
+            )
+        else:
+            bbox = body["bbox"]
+            min_lat, max_lat = float(bbox["min_lat"]), float(bbox["max_lat"])
+            min_lon, max_lon = float(bbox["min_lon"]), float(bbox["max_lon"])
+        min_zoom = int(body.get("min_zoom", 12))
+        max_zoom = int(body.get("max_zoom", 18))
+    except (KeyError, TypeError, ValueError) as e:
+        return jsonify({"ok": False, "error": f"Invalid params: {e}"}), 400
+
+    t = threading.Thread(
+        target=_download_worker,
+        args=(min_lat, max_lat, min_lon, max_lon, min_zoom, max_zoom),
+        daemon=True,
+    )
+    t.start()
+    return jsonify({"ok": True, "started": True})
+
+
+@app.get("/tiles/download/status")
+def tile_download_status():
+    with _download_lock:
+        return jsonify({"ok": True, **_download_state})
 
 
 if __name__ == "__main__":

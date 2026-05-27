@@ -1,4 +1,5 @@
 export { getRosbridgeUrl, getApiBaseUrl, getWebRTCUrl, useLocalTiles } from "./environment";
+export { REGIONS, getActiveRegion, getActiveRegionKey, setActiveRegionKey } from "./regions";
 export { GUI_REQUIRED_TOPICS, TECHNICIAN_TOPICS, TECHNICIAN_COMMAND_TOPICS } from "./ros-topics";
 export {
   MODES,

@@ -2,6 +2,7 @@
 
 import React from "react";
 import MapView from "../map/MapView";
+import MapDeliveryView from "./MapDeliveryView";
 import OperationsWall from "../../features/operations-wall/OperationsWall";
 import OperatorTab from "../../features/operator/OperatorTab";
 import Navigation from "../../features/navigation/Navigation";
@@ -71,7 +72,7 @@ export default function PageContent({
     return (
       <div style={{ height: "100%", minHeight: 0, padding: "10px" }}>
         <div style={{ border: "1px solid #333", borderRadius: "10px", overflow: "hidden", height: "100%" }}>
-          <MapView selectedSubsystem={selectedSubsystem} titleOverride="Map" />
+          <MapDeliveryView selectedSubsystem={selectedSubsystem} />
         </div>
       </div>
     );
