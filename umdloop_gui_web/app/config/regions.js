@@ -16,6 +16,18 @@ export const REGIONS = {
     center: [-76.9378, 38.9897],
     zoom: 13,
   },
+  mdrs: {
+    label: "mdrs",
+    pmtiles: "/regions/mdrs.pmtiles",
+    center: [-110.791813, 38.406224],
+    zoom: 14,
+  },
+  tll: {
+    label: "tll",
+    pmtiles: "/regions/tll.pmtiles",
+    center: [-111.58049736322938, 38.368524388221374],
+    zoom: 14,
+  },
 };
 // REGIONS-END
 

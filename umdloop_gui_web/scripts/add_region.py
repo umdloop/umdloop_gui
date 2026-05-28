@@ -30,7 +30,10 @@ from pathlib import Path
 
 MAPTILER_KEY = "DDQqKsPBfdOZOVxgcoy5"
 DEFAULT_MIN_ZOOM = 12
-DEFAULT_MAX_ZOOM = 18
+# z=16 gives ~2.4 m/pixel — enough for driving context. Each extra zoom level
+# quadruples the tile count, which inflates both the .pmtiles bundle and the
+# bytes shipped over the radio link when the GUI fetches tiles from the Jetson.
+DEFAULT_MAX_ZOOM = 16
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 WEB_ROOT = SCRIPT_DIR.parent
