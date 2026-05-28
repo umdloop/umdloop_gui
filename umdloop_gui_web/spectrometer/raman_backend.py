@@ -50,8 +50,7 @@ class PDADecoder:
         for i in range(self.pixels_per_frame):
             px_idx = start_idx + i
             if px_idx < self.num_pixels:
-                offset = 1 + i * 2
-                value = struct.unpack_from("<H", can_data, offset)[0]
+                value = can_data[1 + i]
                 self.buffer[px_idx] = float(value)
                 self.received_count += 1
 
