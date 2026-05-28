@@ -6,8 +6,8 @@
 // many components (ControlPanel, MapView) consume the data.
 
 import { useSyncExternalStore } from "react";
+import { getApiBaseUrl } from "../config/environment";
 
-const API = "http://127.0.0.1:5000/navigation/prev-waypoints";
 const POLL_MS = 1000;
 
 let _waypoints = [];
@@ -20,7 +20,7 @@ function notify() {
 
 async function fetchOnce() {
   try {
-    const res = await fetch(API);
+    const res = await fetch(`${getApiBaseUrl()}/navigation/prev-waypoints`);
     const data = await res.json();
     if (data.ok) {
       _waypoints = data.waypoints;

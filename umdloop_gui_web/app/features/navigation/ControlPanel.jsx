@@ -2,6 +2,7 @@
 
 import React, { useState, useRef } from "react";
 import { sendPathPlan } from "../../lib/api";
+import { getApiBaseUrl } from "../../config/environment";
 import {
   usePendingWaypoints,
   addPendingWaypoint,
@@ -27,7 +28,7 @@ function flatEarthDist(aLat, aLon, bLat, bLon) {
 }
 
 async function fetchRoverPos() {
-  const res = await fetch("http://127.0.0.1:5000/navigation/rover-position");
+  const res = await fetch(`${getApiBaseUrl()}/navigation/rover-position`);
   return res.json();
 }
 
@@ -361,7 +362,7 @@ export default function ControlPanel() {
     setPrevError("");
     setPrevStatus("");
     try {
-      const res = await fetch("http://127.0.0.1:5000/navigation/clear-waypoints", { method: "POST" });
+      const res = await fetch(`${getApiBaseUrl()}/navigation/clear-waypoints`, { method: "POST" });
       const data = await res.json();
       if (data.ok) {
         setPrevStatus(data.message || "Waypoints cleared");
@@ -382,7 +383,7 @@ export default function ControlPanel() {
     setPrevStatus("Sending…");
     setIsPrevNavigating(true);
     try {
-      const res = await fetch("http://127.0.0.1:5000/navigation/navigate-to-waypoint", {
+      const res = await fetch(`${getApiBaseUrl()}/navigation/navigate-to-waypoint`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ waypoint_id: selectedPrevId }),
