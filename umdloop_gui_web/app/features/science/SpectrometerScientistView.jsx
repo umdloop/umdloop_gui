@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import ROSLIB from "roslib";
 import RamanPlot from "../../../spectrometer/RamanPlot";
 import CameraFeed from "../../components/camera/CameraFeed";
 import CameraManagerModal from "../../components/camera/CameraManagerModal";
-import { CAMERA_ROLES } from "../../config";
+import { CAMERA_ROLES, SPECTROMETER_COMMAND_TOPICS, getRosbridgeUrl } from "../../config";
 
 const RAMAN_WS_URL = "ws://192.168.88.90:5001/ws/spectrum";
 const SITES = ["Site 1", "Site 2"];
@@ -13,6 +14,25 @@ export default function SpectrometerScientistView() {
   const [selectedSite, setSelectedSite] = useState(SITES[0]);
   const [showCameraManager, setShowCameraManager] = useState(false);
   const [fullscreenCam, setFullscreenCam] = useState(null);
+  const [laserEnabled, setLaserEnabled] = useState(false);
+  const [spectrometerStatus, setSpectrometerStatus] = useState("connecting...");
+  const rosRef = useRef(null);
+
+  useEffect(() => {
+    const ros = new ROSLIB.Ros({ url: getRosbridgeUrl() });
+    rosRef.current = ros;
+
+    ros.on("connection", () => setSpectrometerStatus("connected"));
+    ros.on("error", () => setSpectrometerStatus("error"));
+    ros.on("close", () => setSpectrometerStatus("disconnected"));
+
+    return () => {
+      if (rosRef.current === ros) {
+        rosRef.current = null;
+      }
+      ros.close();
+    };
+  }, []);
 
   useEffect(() => {
     const handleKey = (e) => {
@@ -23,6 +43,49 @@ export default function SpectrometerScientistView() {
   }, []);
 
   const nightvisionCamera = { label: "Nightvision Camera", role: CAMERA_ROLES.SCIENCE_1 };
+
+  const publishOnce = (topicConfig, payload) => {
+    if (!rosRef.current) {
+      throw new Error("ROS is not connected");
+    }
+
+    const topic = new ROSLIB.Topic({
+      ros: rosRef.current,
+      name: topicConfig.name,
+      messageType: topicConfig.messageType,
+    });
+
+    topic.publish(new ROSLIB.Message(payload));
+  };
+
+  const buildCommandMessage = (groupName, interfaceName, value) => ({
+    header: {
+      stamp: { sec: 0, nanosec: 0 },
+      frame_id: "",
+    },
+    interface_groups: [groupName],
+    interface_values: [
+      {
+        interface_names: [interfaceName],
+        values: [value],
+      },
+    ],
+  });
+
+  const handleLaserToggle = () => {
+    const nextEnabled = !laserEnabled;
+
+    try {
+      publishOnce(
+        SPECTROMETER_COMMAND_TOPICS.laserCommand,
+        buildCommandMessage("spectrometry_laser", "laser_command", nextEnabled ? 1.0 : 0.0)
+      );
+      setLaserEnabled(nextEnabled);
+      setSpectrometerStatus(nextEnabled ? "laser on" : "laser off");
+    } catch (error) {
+      setSpectrometerStatus(`publish failed: ${error.message}`);
+    }
+  };
 
   return (
     <div style={{ minHeight: 0, height: "100%", padding: "10px" }}>
@@ -73,9 +136,35 @@ export default function SpectrometerScientistView() {
         </div>
 
         <div style={{ padding: "12px", height: "100%", minHeight: 0, background: "#1a1a1a", overflow: "auto" }}>
-          <div style={{ width: "100%", border: "2px solid #3d3d3d", borderRadius: "14px", background: "#202020", padding: "12px", display: "grid", gridTemplateRows: "auto minmax(0, 1fr) minmax(0, 1fr)", gap: "10px", minHeight: "100%" }}>
+          <div style={{ width: "100%", border: "2px solid #3d3d3d", borderRadius: "14px", background: "#202020", padding: "12px", display: "grid", gridTemplateRows: "auto auto minmax(0, 1fr) minmax(0, 1fr)", gap: "10px", minHeight: "100%" }}>
             <div style={{ color: "white", fontWeight: 900, fontSize: "20px", textAlign: "center", letterSpacing: "0.02em" }}>
               Spectrometer Scientist — {selectedSite}
+            </div>
+
+            <div style={{ border: "2px solid #4a4a4a", borderRadius: "10px", background: "#262626", padding: "10px 12px", display: "grid", gap: "10px" }}>
+              <div style={{ color: "#d9d9d9", fontSize: "11px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                Spectrometer Control
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "minmax(150px, 220px) minmax(0, 1fr)", gap: "10px", alignItems: "center" }}>
+                <button
+                  onClick={handleLaserToggle}
+                  style={{
+                    borderRadius: "8px",
+                    border: laserEnabled ? "1px solid #1d6b35" : "1px solid #7a1f1f",
+                    background: laserEnabled ? "#1f7a1f" : "#8f1d1d",
+                    color: "white",
+                    cursor: "pointer",
+                    fontWeight: 800,
+                    padding: "10px 12px",
+                  }}
+                >
+                  {laserEnabled ? "LASER ON" : "LASER OFF"}
+                </button>
+                <div style={{ display: "grid", gap: "4px", color: "#d8d8d8", fontSize: "16px" }}>
+                  <div>Status: <b>{spectrometerStatus}</b></div>
+                  <div>Command topic: <b>{SPECTROMETER_COMMAND_TOPICS.laserCommand.name}</b></div>
+                </div>
+              </div>
             </div>
 
             <div style={{ background: "#232323", border: "2px solid #3d3d3d", borderRadius: "10px", padding: "10px", display: "grid", gridTemplateRows: "auto auto minmax(0, 1fr)", gap: "8px", minHeight: 0 }}>

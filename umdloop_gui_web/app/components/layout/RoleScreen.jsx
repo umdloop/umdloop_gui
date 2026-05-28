@@ -4,9 +4,9 @@ import React, { useState } from "react";
 import TechnicianDashboard from "../../features/technician/TechnicianDashboard";
 import OperatorTab from "../../features/operator/OperatorTab";
 import Navigation from "../../features/navigation/Navigation";
-import ScienceMonitor from "../../features/science/ScienceMonitor";
 import EquipmentOperatorView from "../../features/science/EquipmentOperatorView";
 import SpectrometerScientistView from "../../features/science/SpectrometerScientistView";
+import FluorometerScientistView from "../../features/science/FluorometerScientistView";
 import OperationsWall from "../../features/operations-wall/OperationsWall";
 import MapView from "../map/MapView";
 import MapDeliveryView from "./MapDeliveryView";
@@ -168,7 +168,7 @@ function getRoleContent({ mission, role, selectedSubsystem, setSelectedSubsystem
   if (role.id === "fluorometer-scientist") {
     return (
       <div style={{ height: "100%", minHeight: 0 }}>
-        <ScienceMonitor />
+        <FluorometerScientistView />
       </div>
     );
   }
