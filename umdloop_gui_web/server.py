@@ -406,6 +406,39 @@ def rover_position():
     return jsonify({"ok": True, "fix": True, "latitude": pos["latitude"], "longitude": pos["longitude"]}), 200
 
 
+@app.get("/navigation/plan")
+def get_plan():
+    ros_context.start()
+    plan = ros_context.node.plan
+    if plan is None:
+        return jsonify({"ok": True, "available": False}), 200
+    return jsonify({"ok": True, "available": True, "coordinates": plan}), 200
+
+
+@app.get("/navigation/prev-waypoints")
+def get_prev_waypoints():
+    ros_context.start()
+    return jsonify({"ok": True, "waypoints": ros_context.node.prev_waypoints}), 200
+
+
+@app.post("/navigation/navigate-to-waypoint")
+def navigate_to_waypoint():
+    data = request.get_json(silent=True) or {}
+    wp_id = data.get("waypoint_id")
+    if wp_id is None:
+        return jsonify({"ok": False, "error": "waypoint_id required"}), 400
+    ros_context.start()
+    accepted, success, message = ros_context.node.navigate_to_waypoint_blocking(int(wp_id))
+    return jsonify({"ok": True, "accepted": accepted, "success": success, "message": message}), 200
+
+
+@app.post("/navigation/clear-waypoints")
+def clear_waypoints():
+    ros_context.start()
+    success, message = ros_context.node.clear_waypoints()
+    return jsonify({"ok": success, "message": message}), 200
+
+
 @app.post("/navigation/path-plan")
 def navigation_path_plan():
     data = request.get_json(silent=True) or {}

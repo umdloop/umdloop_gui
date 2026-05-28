@@ -13,7 +13,7 @@ export const SCIENCE_SUBSYSTEMS = [
   "Equipment Specialist Tab 1",
   "Equipment Specialist Tab 2",
 ];
-export const NAVIGATION_BUTTONS = ["Object Detection", "Control Panel", "Placeholder2"];
+export const NAVIGATION_BUTTONS = ["Object Detection", "Control Panel", "Map"];
 
 export const CAMERA_ROLES = {
   FRONT:       "front",
