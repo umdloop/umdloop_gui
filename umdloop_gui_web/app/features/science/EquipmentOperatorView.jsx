@@ -190,42 +190,46 @@ export default function EquipmentOperatorView() {
             Science Controller
           </button>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 220px) 140px", gap: "8px", alignItems: "center" }}>
-          <input
-            type="number"
-            step="0.1"
-            value={clsAngle}
-            onChange={(event) => setClsAngle(event.target.value)}
-            disabled={!clsActive}
-            style={{
-              borderRadius: "8px",
-              border: "1px solid #555",
-              background: clsActive ? "#2f2f2f" : "#1f1f1f",
-              color: clsActive ? "white" : "#888",
-              padding: "10px 12px",
-              fontWeight: 700,
-              width: "100%",
-            }}
-          />
-          <button
-            onClick={handleAngleUpdate}
-            disabled={!clsActive}
-            style={{
-              borderRadius: "8px",
-              border: "1px solid #555",
-              background: clsActive ? "#1a3f6f" : "#1f1f1f",
-              color: clsActive ? "white" : "#888",
-              cursor: clsActive ? "pointer" : "not-allowed",
-              fontWeight: 800,
-              padding: "10px 12px",
-            }}
-          >
-            Update
-          </button>
+        <div style={{ display: "grid", gap: "8px" }}>
+          <div style={{ color: "#d8d8d8", fontSize: "15px" }}>
+            Enter desired conveyor belt position in degrees: 
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "140px 120px", gap: "8px", alignItems: "center" }}>
+            <input
+              type="number"
+              step="0.1"
+              value={clsAngle}
+              onChange={(event) => setClsAngle(event.target.value)}
+              disabled={!clsActive}
+              style={{
+                borderRadius: "8px",
+                border: "1px solid #555",
+                background: clsActive ? "#2f2f2f" : "#1f1f1f",
+                color: clsActive ? "white" : "#888",
+                padding: "10px 12px",
+                fontWeight: 700,
+                width: "100%",
+              }}
+            />
+            <button
+              onClick={handleAngleUpdate}
+              disabled={!clsActive}
+              style={{
+                borderRadius: "8px",
+                border: "1px solid #555",
+                background: clsActive ? "#1a3f6f" : "#1f1f1f",
+                color: clsActive ? "white" : "#888",
+                cursor: clsActive ? "pointer" : "not-allowed",
+                fontWeight: 800,
+                padding: "10px 12px",
+              }}
+            >
+              Update
+            </button>
+          </div>
         </div>
         <div style={{ display: "grid", gap: "4px", color: "#d8d8d8", fontSize: "15px" }}>
           <div>Status: <b>{equipmentStatus}</b></div>
-          <div>Switch service: <b>{EQUIPMENT_OPERATOR_COMMAND_TOPICS.controllerSwitchService.name}</b></div>
           <div>Reference topic: <b>{EQUIPMENT_OPERATOR_COMMAND_TOPICS.conveyorAngleReference.name}</b></div>
         </div>
       </div>
