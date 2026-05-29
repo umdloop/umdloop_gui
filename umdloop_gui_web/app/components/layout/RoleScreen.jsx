@@ -8,6 +8,7 @@ import EquipmentOperatorView from "../../features/science/EquipmentOperatorView"
 import SpectrometerScientistView from "../../features/science/SpectrometerScientistView";
 import FluorometerScientistView from "../../features/science/FluorometerScientistView";
 import OperationsWall from "../../features/operations-wall/OperationsWall";
+import AutonavMission from "../../features/autonav/AutonavMission";
 import MapView from "../map/MapView";
 import MapDeliveryView from "./MapDeliveryView";
 import SubsystemBar from "./SubsystemBar";
@@ -169,6 +170,15 @@ function getRoleContent({ mission, role, selectedSubsystem, setSelectedSubsystem
     return (
       <div style={{ height: "100%", minHeight: 0 }}>
         <FluorometerScientistView />
+      </div>
+    );
+  }
+
+  // Autonomy Operator (autonomous nav mission) — full C2 tab for URC 1.f.
+  if (role.id === "autonomy-operator") {
+    return (
+      <div style={{ height: "100%", minHeight: 0 }}>
+        <AutonavMission />
       </div>
     );
   }
