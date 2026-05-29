@@ -155,7 +155,7 @@ export default function FluorometerScientistView() {
     }
   };
 
-  const nightvisionCamera = { label: "Nightvision Camera", role: CAMERA_ROLES.SCIENCE_1 };
+  const nightvisionCamera = { label: "Nightvision Camera", role: CAMERA_ROLES.NIGHT_VISION };
 
   return (
     <div style={{ minHeight: 0, height: "100%", padding: "10px" }}>

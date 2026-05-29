@@ -42,7 +42,7 @@ export default function SpectrometerScientistView() {
     return () => window.removeEventListener("keydown", handleKey);
   }, []);
 
-  const nightvisionCamera = { label: "Nightvision Camera", role: CAMERA_ROLES.SCIENCE_1 };
+  const nightvisionCamera = { label: "Nightvision Camera", role: CAMERA_ROLES.NIGHT_VISION };
 
   const publishOnce = (topicConfig, payload) => {
     if (!rosRef.current) {

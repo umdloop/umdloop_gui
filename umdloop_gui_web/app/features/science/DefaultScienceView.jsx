@@ -4,7 +4,7 @@ import React from "react";
 import CameraFeed from "../../components/camera/CameraFeed";
 import { CAMERA_ROLES } from "../../config";
 
-const SCIENCE_CAMERA_ROLES = [CAMERA_ROLES.SCIENCE_1, CAMERA_ROLES.SCIENCE_2, CAMERA_ROLES.SCIENCE_3];
+const SCIENCE_CAMERA_ROLES = [CAMERA_ROLES.OVERHEAD, CAMERA_ROLES.SCOOPS_DIRT, CAMERA_ROLES.SAMPLER];
 
 function CameraImage({ cameraId, alt, rotateDeg, style, ...imageProps }) {
   return (

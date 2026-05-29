@@ -6,7 +6,7 @@ import CameraFeed from "../../components/camera/CameraFeed";
 import { CAMERA_ROLES } from "../../config";
 
 const RAMAN_WS_URL = "ws://192.168.88.90:5001/ws/spectrum";
-const SCIENCE_CAMERA_ROLES = [CAMERA_ROLES.SCIENCE_1, CAMERA_ROLES.SCIENCE_2, CAMERA_ROLES.SCIENCE_3];
+const SCIENCE_CAMERA_ROLES = [CAMERA_ROLES.OVERHEAD, CAMERA_ROLES.SCOOPS_DIRT, CAMERA_ROLES.SAMPLER];
 
 function CameraImage({ cameraId, alt, rotateDeg, style, ...imageProps }) {
   return (
@@ -30,7 +30,7 @@ export default function Scientist1Tab2({
   cameraRotateDeg,
   setFullscreenCam,
 }) {
-  const tab2NightVisionCamera = { label: "Nightvision Camera", id: cameraBySlot(7) };
+  const tab2NightVisionCamera = { label: "Nightvision Camera", id: CAMERA_ROLES.NIGHT_VISION };
 
   return (
     <div style={{ padding: "12px", height: "100%", minHeight: 0, background: "#1a1a1a", overflow: "auto" }}>

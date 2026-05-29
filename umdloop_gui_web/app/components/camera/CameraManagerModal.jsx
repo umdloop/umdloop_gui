@@ -20,9 +20,10 @@ const ROLE_OPTIONS = [
   { value: CAMERA_ROLES.ARM_JOINT, label: "Arm Joint" },
   { value: CAMERA_ROLES.ARM_EE, label: "Arm End Effector" },
   { value: CAMERA_ROLES.ARM_GRIPPER, label: "Arm Gripper" },
-  { value: CAMERA_ROLES.SCIENCE_1, label: "Science Cam 1 / Overhead Scoops / Nightvision" },
-  { value: CAMERA_ROLES.SCIENCE_2, label: "Science Cam 2 / View of Scoops" },
-  { value: CAMERA_ROLES.SCIENCE_3, label: "Science Cam 3 / View of Sampler / Rover Field View" },
+  { value: CAMERA_ROLES.OVERHEAD, label: "Overhead" },
+  { value: CAMERA_ROLES.SCOOPS_DIRT, label: "Scoops Dirt" },
+  { value: CAMERA_ROLES.SAMPLER, label: "Sampler" },
+  { value: CAMERA_ROLES.NIGHT_VISION, label: "Night vision" },
 ];
 
 const QUALITY_OPTIONS = ["low", "medium", "high", "ultra"];

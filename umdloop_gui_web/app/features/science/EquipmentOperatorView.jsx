@@ -7,11 +7,10 @@ import CameraManagerModal from "../../components/camera/CameraManagerModal";
 import { CAMERA_ROLES, EQUIPMENT_OPERATOR_COMMAND_TOPICS, getRosbridgeUrl } from "../../config";
 
 const EQUIPMENT_CAMERAS = [
-  { label: "Equipment Cam 1", role: CAMERA_ROLES.SCIENCE_1 },
-  { label: "Equipment Cam 2", role: CAMERA_ROLES.SCIENCE_2 },
-  { label: "Equipment Cam 3", role: CAMERA_ROLES.SCIENCE_3 },
-  { label: "Equipment Cam 4", role: null },
-  { label: "Equipment Cam 5", role: null },
+  { label: "Overhead", role: CAMERA_ROLES.OVERHEAD },
+  { label: "Scoops Dirt", role: CAMERA_ROLES.SCOOPS_DIRT },
+  { label: "Sampler", role: CAMERA_ROLES.SAMPLER },
+  { label: "Night vision", role: CAMERA_ROLES.NIGHT_VISION },
 ];
 
 const CONTROLLERS = {
@@ -238,7 +237,7 @@ export default function EquipmentOperatorView() {
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-          gridTemplateRows: "repeat(3, minmax(0, 1fr))",
+          gridTemplateRows: "repeat(2, minmax(0, 1fr))",
           gap: "8px",
           minHeight: 0,
         }}
