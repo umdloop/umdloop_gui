@@ -488,12 +488,18 @@ def navigation_path_plan():
             "message": msg
         })
 
-    # ObjectDetection mode: only publish mode; BT handles rest
+    # ObjectDetection mode: publish the target class for the BT + GUI overlay.
+    object_class = (data.get("object_class") or "").strip()
+    if not object_class:
+        return jsonify({"ok": False, "error": "object_class required for Object Detection mode"}), 400
+
+    ros_context.node.publish_object_class(object_class)
     return jsonify({
         "ok": True,
         "nav_mode": bt_mode,
         "goal_sent": False,
-        "message": "nav_mode published; no GNSS goal sent for ObjectDetection"
+        "object_class": object_class,
+        "message": f"nav_mode published; object_class '{object_class}' published"
     })
 
 

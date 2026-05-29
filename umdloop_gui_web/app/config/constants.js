@@ -33,3 +33,17 @@ export const CAMERA_ROLES = {
   SCIENCE_2:   "science_2",
   SCIENCE_3:   "science_3",
 };
+
+// Target classes the YOLO node detects (mirror `target_classes` in
+// yolo_ros_node.py). Selectable as the goal when navigating in Object
+// Detection mode.
+export const OBJECT_DETECTION_CLASSES = ["Bottle", "Mallet", "Rock-Pick-Hammer"];
+
+// Maps a YOLO camera index (the position of an image topic in the node's
+// `image_topics` param, which publishes to /yolo/{index}/...) to the WebRTC
+// camera role it corresponds to. Keep this in sync with the launch order.
+export const YOLO_CAMERA_MAP = {
+  0: CAMERA_ROLES.FRONT,
+  1: CAMERA_ROLES.LEFT_SIDE,
+  2: CAMERA_ROLES.RIGHT_SIDE,
+};

@@ -10,6 +10,7 @@ import {
   setPendingWaypoints,
 } from "../../lib/pendingWaypointsStore";
 import { usePastWaypoints, setPastWaypoints as storeSortPrev } from "../../lib/pastWaypointsStore";
+import { OBJECT_DETECTION_CLASSES } from "../../config";
 
 const MODES = ["GNSS", "Object Detection", "Aruco Tag"];
 
@@ -56,7 +57,7 @@ function SectionPanel({ children, style }) {
   );
 }
 
-function WaypointRow({ number, latitude, longitude, mode, isSelected, onSelect, onRemove }) {
+function WaypointRow({ number, latitude, longitude, mode, objectClass, isSelected, onSelect, onRemove }) {
   return (
     <div
       onClick={onSelect}
@@ -91,7 +92,7 @@ function WaypointRow({ number, latitude, longitude, mode, isSelected, onSelect, 
                 color: "white",
               }}
             >
-              {mode}
+              {mode}{objectClass ? `: ${objectClass}` : ""}
             </span>
           </div>
         )}
@@ -187,6 +188,7 @@ function WaypointList({ waypoints, selectedIds, onToggle, onRemove, emptyText })
           latitude={wp.latitude}
           longitude={wp.longitude}
           mode={wp.mode}
+          objectClass={wp.objectClass}
           isSelected={selectedIds.has(wp.id)}
           onSelect={() => onToggle(wp.id)}
           onRemove={onRemove ? () => onRemove(wp.id) : null}
@@ -203,6 +205,7 @@ export default function ControlPanel() {
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
   const [navMode, setNavMode] = useState("GNSS");
+  const [objectClass, setObjectClass] = useState(OBJECT_DETECTION_CLASSES[0]);
   const [addError, setAddError] = useState("");
 
   // ── Pending Waypoints state ───────────────────────────────────────────────
@@ -232,8 +235,17 @@ export default function ControlPanel() {
       setAddError("Enter valid latitude and longitude before adding.");
       return;
     }
+    if (navMode === "Object Detection" && !objectClass) {
+      setAddError("Select a target class for Object Detection.");
+      return;
+    }
     setAddError("");
-    addPendingWaypoint({ latitude: lat, longitude: lon, mode: navMode });
+    addPendingWaypoint({
+      latitude: lat,
+      longitude: lon,
+      mode: navMode,
+      objectClass: navMode === "Object Detection" ? objectClass : undefined,
+    });
     setLatitude("");
     setLongitude("");
   };
@@ -310,6 +322,7 @@ export default function ControlPanel() {
           longitude: wp.longitude,
           positionTolerance: 0.0,
           mode: wp.mode,
+          objectClass: wp.objectClass,
         });
 
         if (data.ok === false) {
@@ -462,6 +475,21 @@ export default function ControlPanel() {
             </label>
           ))}
         </div>
+
+        {navMode === "Object Detection" && (
+          <div>
+            <div style={{ fontWeight: 800, marginBottom: 8 }}>Target Class</div>
+            <select
+              value={objectClass}
+              onChange={(e) => setObjectClass(e.target.value)}
+              style={inputStyle}
+            >
+              {OBJECT_DETECTION_CLASSES.map((cls) => (
+                <option key={cls} value={cls}>{cls}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <button
           onClick={onAdd}

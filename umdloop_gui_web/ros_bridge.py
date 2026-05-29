@@ -36,6 +36,16 @@ class RosGpsClient(Node):
         nav_mode_qos.reliability = ReliabilityPolicy.RELIABLE
         self._nav_mode_pub = self.create_publisher(String, "/nav_mode", nav_mode_qos)
 
+        # ── object_class publisher ────────────────────────────────────────────
+        # Latched so late joiners (BT, GUI detection overlay) get the current
+        # target class. Published when navigating in Object Detection mode.
+        object_class_qos = QoSProfile(depth=1)
+        object_class_qos.durability = DurabilityPolicy.TRANSIENT_LOCAL
+        object_class_qos.reliability = ReliabilityPolicy.RELIABLE
+        self._object_class_pub = self.create_publisher(
+            String, "/object_class", object_class_qos
+        )
+
         # ── Service clients ───────────────────────────────────────────────────
         self._clear_wp_client = self.create_client(
             ClearWaypoints, "/waypoint_manager/clear_waypoints"
@@ -101,6 +111,12 @@ class RosGpsClient(Node):
         msg.data = mode
         self._nav_mode_pub.publish(msg)
         self.get_logger().info(f"Published /nav_mode = '{mode}'")
+
+    def publish_object_class(self, object_class: str):
+        msg = String()
+        msg.data = object_class
+        self._object_class_pub.publish(msg)
+        self.get_logger().info(f"Published /object_class = '{object_class}'")
 
     # ── Blocking helpers (Flask thread waits on an Event; spin thread does work) ──
 
