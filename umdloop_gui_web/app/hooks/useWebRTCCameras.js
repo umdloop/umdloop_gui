@@ -76,6 +76,9 @@ export default function useWebRTCCameras(url) {
 
   const wsRef = useRef(null);
   const pcsRef = useRef(new Map());
+  const watchdogsRef = useRef(new Map()); // id -> setTimeout handle for "no track arrived" recovery
+  const enabledIdsRef = useRef(new Set()); // last server-reported enabled set; consulted by retry timers
+  const streamsRef = useRef({});           // mirror of streams so retry timers can check without re-rendering
   const reconnectTimerRef = useRef(null);
   const mountedRef = useRef(true);
 
@@ -84,6 +87,9 @@ export default function useWebRTCCameras(url) {
       pc.close();
     }
     pcsRef.current.clear();
+    for (const handle of watchdogsRef.current.values()) clearTimeout(handle);
+    watchdogsRef.current.clear();
+    streamsRef.current = {};
     setStreams({});
   }, []);
 
@@ -102,10 +108,19 @@ export default function useWebRTCCameras(url) {
   const whepBase = getWhepBaseUrl();
 
   const stopWhep = useCallback((id) => {
+    const handle = watchdogsRef.current.get(id);
+    if (handle) {
+      clearTimeout(handle);
+      watchdogsRef.current.delete(id);
+    }
     const pc = pcsRef.current.get(id);
     if (pc) {
       pc.close();
       pcsRef.current.delete(id);
+    }
+    if (id in streamsRef.current) {
+      const { [id]: _, ...rest } = streamsRef.current;
+      streamsRef.current = rest;
     }
     setStreams((prev) => {
       if (!(id in prev)) return prev;
@@ -115,7 +130,6 @@ export default function useWebRTCCameras(url) {
   }, []);
 
   const startWhep = useCallback(async (id) => {
-    console.log("[whep] startWhep called", id, "alreadyHas=", pcsRef.current.has(id));
     if (pcsRef.current.has(id)) return;
 
     const pc = new RTCPeerConnection({ iceServers: [] });
@@ -123,36 +137,61 @@ export default function useWebRTCCameras(url) {
 
     pc.addTransceiver("video", { direction: "recvonly" });
     pc.ontrack = (event) => {
-      console.log("[whep] ontrack fired", id);
       if (!mountedRef.current) return;
       const stream = event.streams[0] ?? new MediaStream([event.track]);
+      const handle = watchdogsRef.current.get(id);
+      if (handle) {
+        clearTimeout(handle);
+        watchdogsRef.current.delete(id);
+      }
+      streamsRef.current = { ...streamsRef.current, [id]: stream };
       setStreams((prev) => ({ ...prev, [id]: stream }));
     };
-    pc.oniceconnectionstatechange = () => console.log("[whep]", id, "ice=", pc.iceConnectionState);
-    pc.onconnectionstatechange = () => console.log("[whep]", id, "conn=", pc.connectionState);
 
     try {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      // For ROS-topic cameras the subprocess (Python + GStreamer + rosbridge)
-      // can take 5–10 s to start publishing RTSP. Retry for up to 30 s.
+      // Backend's RTSP publish handshake can lag the WS state broadcast by
+      // a few hundred ms — and with several cameras starting at once, MediaMTX
+      // can take much longer than the old 3s budget to register the publisher.
+      // Keep retrying on 404 with backoff as long as this PC is still current.
       let res;
-      for (let attempt = 0; attempt < 60; attempt++) {
-        if (!pcsRef.current.has(id)) return;
+      let delayMs = 300;
+      while (pcsRef.current.get(id) === pc) {
         res = await fetch(`${whepBase}/${id}/whep`, {
           method: "POST",
           headers: { "Content-Type": "application/sdp" },
           body: offer.sdp,
         });
         if (res.ok || res.status !== 404) break;
-        await new Promise((r) => setTimeout(r, 500));
+        await new Promise((r) => setTimeout(r, delayMs));
+        delayMs = Math.min(delayMs * 1.5, 2000);
       }
+      if (pcsRef.current.get(id) !== pc) return; // stopped or replaced while waiting
       if (!res?.ok) throw new Error(`WHEP ${res?.status}`);
       await pc.setRemoteDescription({ type: "answer", sdp: await res.text() });
+
+      // Watchdog: if no track arrives within 8s, tear down and try again.
+      const watchdog = setTimeout(() => {
+        if (!mountedRef.current) return;
+        if (pcsRef.current.get(id) !== pc) return;
+        if (id in streamsRef.current) return;
+        console.warn(`WHEP watchdog: no track for ${id}, restarting`);
+        stopWhep(id);
+        if (enabledIdsRef.current.has(id)) startWhep(id);
+      }, 8000);
+      watchdogsRef.current.set(id, watchdog);
     } catch (err) {
       console.error(`WHEP start failed for ${id}:`, err);
-      stopWhep(id);
+      // Don't give up — backend is source of truth on enable state.
+      if (pcsRef.current.get(id) === pc) {
+        stopWhep(id);
+        setTimeout(() => {
+          if (!mountedRef.current) return;
+          if (!pcsRef.current.has(id) && enabledIdsRef.current.has(id)) startWhep(id);
+        }, 1500);
+      }
     }
   }, [whepBase, stopWhep]);
 
@@ -191,10 +230,7 @@ export default function useWebRTCCameras(url) {
         case "state":
         case "camera_state":
         case "camera_list":
-        case undefined:
-          if (msg.cameras) {
-            setCameras(normalizeCameras(msg));
-          }
+          setCameras(normalizeCameras(msg));
           break;
         case "missions_state":
           setMissions(msg.missions ?? []);
@@ -224,7 +260,7 @@ export default function useWebRTCCameras(url) {
 
   useEffect(() => {
     const enabledIds = new Set(cameras.filter((c) => c.enabled).map((c) => c.id));
-    console.log("[whep] cameras updated. enabledIds=", [...enabledIds], "currentPcs=", [...pcsRef.current.keys()]);
+    enabledIdsRef.current = enabledIds;
     for (const id of enabledIds) {
       if (!pcsRef.current.has(id)) startWhep(id);
     }

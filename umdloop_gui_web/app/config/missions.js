@@ -39,6 +39,7 @@ export const MISSIONS = [
     name: "Autonomous Navigation Mission",
     roles: [
       { id: "rover-technician", name: "Rover Technician" },
+      { id: "autonomy-operator", name: "Minimal Autonomy Operator" },
       { id: "camera-operator", name: "Camera Operator" },
       { id: "software-specialist", name: "Software Specialist" },
       { id: "navigator", name: "Navigator" },

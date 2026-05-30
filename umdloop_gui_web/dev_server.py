@@ -8,6 +8,10 @@ Provides:
   POST /tiles/download             — real tile download (identical to production)
   GET  /tiles/download/status      — download progress
 
+Also starts a mock rosbridge on ws://localhost:9090 (see mock_rosbridge.py) so the
+Autonomy Operator tab can be driven end-to-end with no ROS. Disable with
+  DEV_MOCK_ROSBRIDGE=0
+
 Run alongside the Next.js dev server:
   Terminal 1:  cd umdloop_gui_web && uv run python dev_server.py
   Terminal 2:  cd umdloop_gui_web && npm run dev
@@ -24,6 +28,8 @@ from urllib import request as urllib_request
 
 from flask import Flask, Response, jsonify, request, send_file
 from flask_cors import CORS
+
+import mock_rosbridge
 
 app = Flask(__name__)
 CORS(app)
@@ -204,4 +210,7 @@ if __name__ == "__main__":
     print(f"  Fake rover at ({_BASE_LAT}, {_BASE_LON}), slowly circling")
     print("  Heading rotates 0→360° every 60s")
     print("  Tiles: local cache + MapTiler CDN fallback")
+    if os.getenv("DEV_MOCK_ROSBRIDGE", "1") != "0":
+        mock_rosbridge.start_in_thread()
+        print("  Mock rosbridge on ws://localhost:9090 (set DEV_MOCK_ROSBRIDGE=0 to disable)")
     app.run(host="0.0.0.0", port=5000, debug=False)

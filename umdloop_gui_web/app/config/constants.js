@@ -29,9 +29,10 @@ export const CAMERA_ROLES = {
   ARM_JOINT:   "arm_joint",
   ARM_EE:      "arm_ee",
   ARM_GRIPPER: "arm_gripper",
-  SCIENCE_1:   "science_1",
-  SCIENCE_2:   "science_2",
-  SCIENCE_3:   "science_3",
+  OVERHEAD:     "overhead",
+  SCOOPS_DIRT:  "scoops_dirt",
+  SAMPLER:      "sampler",
+  NIGHT_VISION: "night_vision",
 };
 
 // Target classes the YOLO node detects (mirror `target_classes` in

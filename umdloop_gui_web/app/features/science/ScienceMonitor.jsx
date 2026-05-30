@@ -13,7 +13,7 @@ import EquipmentSpecialist from "./EquipmentSpecialist";
 import DefaultScienceView from "./DefaultScienceView";
 
 const RAMAN_WS_URL = "ws://192.168.88.90:5001/ws/spectrum";
-const SCIENCE_CAMERA_ROLES = [CAMERA_ROLES.SCIENCE_1, CAMERA_ROLES.SCIENCE_2, CAMERA_ROLES.SCIENCE_3];
+const SCIENCE_CAMERA_ROLES = [CAMERA_ROLES.OVERHEAD, CAMERA_ROLES.SCOOPS_DIRT, CAMERA_ROLES.SAMPLER];
 
 function CameraImage({ cameraId, alt, rotateDeg, style, ...imageProps }) {
   return (
@@ -144,7 +144,7 @@ export default function ScienceMonitor() {
       body = (
         <div style={{ display: "grid", gap: "10px" }}>
           <CameraImage
-            cameraId={CAMERA_ROLES.SCIENCE_1}
+            cameraId={CAMERA_ROLES.OVERHEAD}
             alt="Latest panorama preview"
             rotateDeg={cameraRotateDeg}
             style={{ width: "100%", maxHeight: "50vh", objectFit: "cover", borderRadius: "10px", border: "1px solid #444", background: "#111" }}

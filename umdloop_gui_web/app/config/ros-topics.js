@@ -54,6 +54,41 @@ export const OBJECT_CLASS_TOPIC = {
   name: process.env.NEXT_PUBLIC_OBJECT_CLASS_TOPIC || "/object_class",
   messageType: "std_msgs/msg/String",
 };
+export const FLUOROMETER_COMMAND_TOPICS = {
+  ledCommand: {
+    name: process.env.NEXT_PUBLIC_GUI_FLUORO_LED_COMMAND_TOPIC || "/fluoro_led_gpio_controller/commands",
+    messageType: process.env.NEXT_PUBLIC_GUI_FLUORO_LED_COMMAND_TYPE || "control_msgs/msg/DynamicInterfaceGroupValues",
+  },
+  photodiodeRequestCommand: {
+    name: process.env.NEXT_PUBLIC_GUI_PHOTODIODE_REQUEST_COMMAND_TOPIC || "/photodiode_gpio_controller/commands",
+    messageType: process.env.NEXT_PUBLIC_GUI_PHOTODIODE_REQUEST_COMMAND_TYPE || "control_msgs/msg/DynamicInterfaceGroupValues",
+  },
+};
+
+export const SPECTROMETER_COMMAND_TOPICS = {
+  laserCommand: {
+    name: process.env.NEXT_PUBLIC_GUI_SPECTROMETER_LASER_COMMAND_TOPIC || "/laser_gpio_controller/commands",
+    messageType: process.env.NEXT_PUBLIC_GUI_SPECTROMETER_LASER_COMMAND_TYPE || "control_msgs/msg/DynamicInterfaceGroupValues",
+  },
+};
+
+export const EQUIPMENT_OPERATOR_COMMAND_TOPICS = {
+  conveyorAngleReference: {
+    name: process.env.NEXT_PUBLIC_GUI_CONVEYOR_CLS_REFERENCE_TOPIC || "/conveyor_belt_cls_controller/reference",
+    messageType: process.env.NEXT_PUBLIC_GUI_CONVEYOR_CLS_REFERENCE_TYPE || "std_msgs/msg/Float64",
+  },
+  controllerSwitchService: {
+    name: process.env.NEXT_PUBLIC_GUI_CONTROLLER_SWITCH_SERVICE || "/controller_manager/switch_controller",
+    serviceType: process.env.NEXT_PUBLIC_GUI_CONTROLLER_SWITCH_SERVICE_TYPE || "controller_manager_msgs/srv/SwitchController",
+  },
+};
+
+export const FLUOROMETER_TOPICS = {
+  photodiodeResponse: {
+    name: process.env.NEXT_PUBLIC_GUI_PHOTODIODE_RESPONSE_TOPIC || "/photodiode_gpio_controller/gpio_states",
+    messageType: process.env.NEXT_PUBLIC_GUI_PHOTODIODE_RESPONSE_TYPE || "control_msgs/msg/DynamicInterfaceGroupValues",
+  },
+};
 
 export const TECHNICIAN_COMMAND_TOPICS = {
   hardStopTwist: (process.env.NEXT_PUBLIC_TECHNICIAN_HARD_STOP_TOPICS || "/cmd_vel_teleop,/cmd_vel_nav,/cmd_vel_smoothed")

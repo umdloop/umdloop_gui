@@ -31,9 +31,10 @@ export default function ScienceView({
   }, []);
 
   const scienceCameras = [
-    { label: "Science Cam 1", role: CAMERA_ROLES.SCIENCE_1 },
-    { label: "Science Cam 2", role: CAMERA_ROLES.SCIENCE_2 },
-    { label: "Science Cam 3", role: CAMERA_ROLES.SCIENCE_3 },
+    { label: "Overhead", role: CAMERA_ROLES.OVERHEAD },
+    { label: "Scoops Dirt", role: CAMERA_ROLES.SCOOPS_DIRT },
+    { label: "Sampler", role: CAMERA_ROLES.SAMPLER },
+    { label: "Night vision", role: CAMERA_ROLES.NIGHT_VISION },
   ];
 
   const graphBar = (value, color) => (
