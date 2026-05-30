@@ -135,10 +135,10 @@ export default function useWebRTCCameras(url) {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      // Backend's RTSP publish handshake can lag the WS state broadcast by
-      // a few hundred ms; retry on 404 while MediaMTX has no publisher.
+      // For ROS-topic cameras the subprocess (Python + GStreamer + rosbridge)
+      // can take 5–10 s to start publishing RTSP. Retry for up to 30 s.
       let res;
-      for (let attempt = 0; attempt < 10; attempt++) {
+      for (let attempt = 0; attempt < 60; attempt++) {
         if (!pcsRef.current.has(id)) return;
         res = await fetch(`${whepBase}/${id}/whep`, {
           method: "POST",
@@ -146,7 +146,7 @@ export default function useWebRTCCameras(url) {
           body: offer.sdp,
         });
         if (res.ok || res.status !== 404) break;
-        await new Promise((r) => setTimeout(r, 300));
+        await new Promise((r) => setTimeout(r, 500));
       }
       if (!res?.ok) throw new Error(`WHEP ${res?.status}`);
       await pc.setRemoteDescription({ type: "answer", sdp: await res.text() });

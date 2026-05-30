@@ -39,11 +39,17 @@ export const CAMERA_ROLES = {
 // Detection mode.
 export const OBJECT_DETECTION_CLASSES = ["Bottle", "Mallet", "Rock-Pick-Hammer"];
 
-// Maps a YOLO camera index (the position of an image topic in the node's
-// `image_topics` param, which publishes to /yolo/{index}/...) to the WebRTC
-// camera role it corresponds to. Keep this in sync with the launch order.
+// Maps a YOLO camera index (position in yolo_params.yaml image_topics list,
+// publishes to /yolo/cam{index}/...) to the WebRTC camera role.
+//
+// yolo_params.yaml order:
+//   0: /zed/zed_node/...        (ZED → assign "front" role in Camera Manager)
+//   1: /cameras/cam0/image_raw  (USB cam 0 → assign whatever role fits)
+//   2: /cameras/cam1/image_raw  (USB cam 1 → left_side)
+//   3: /cameras/cam2/image_raw  (USB cam 2 → right_side)
 export const YOLO_CAMERA_MAP = {
   0: CAMERA_ROLES.FRONT,
-  1: CAMERA_ROLES.LEFT_SIDE,
-  2: CAMERA_ROLES.RIGHT_SIDE,
+  1: CAMERA_ROLES.BACK,
+  2: CAMERA_ROLES.LEFT_SIDE,
+  3: CAMERA_ROLES.RIGHT_SIDE,
 };

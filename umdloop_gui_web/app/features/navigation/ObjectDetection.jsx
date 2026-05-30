@@ -1,7 +1,8 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import CameraFeed from "../../components/camera/CameraFeed";
+import CameraManagerModal from "../../components/camera/CameraManagerModal";
 import useYoloDetections from "../../hooks/useYoloDetections";
 import { YOLO_CAMERA_MAP } from "../../config";
 
@@ -14,6 +15,7 @@ function prettyRole(role) {
 
 export default function ObjectDetection() {
   const { goalClass, boxesByIndex, firstHitIndex, indices, rosStatus } = useYoloDetections();
+  const [showCameraManager, setShowCameraManager] = useState(false);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16, width: "100%" }}>
@@ -50,7 +52,25 @@ export default function ObjectDetection() {
             Found on {prettyRole(YOLO_CAMERA_MAP[firstHitIndex])} camera
           </div>
         )}
+        <button
+          onClick={() => setShowCameraManager(true)}
+          style={{
+            marginLeft: "auto",
+            padding: "6px 14px",
+            borderRadius: 8,
+            border: "1px solid #555",
+            background: "#1a3f6f",
+            color: "white",
+            cursor: "pointer",
+            fontWeight: 800,
+            fontSize: 12,
+          }}
+        >
+          Camera Manager
+        </button>
       </div>
+
+      {showCameraManager && <CameraManagerModal onClose={() => setShowCameraManager(false)} />}
 
       {/* Camera grid (only the YOLO-mapped cameras) */}
       <div
