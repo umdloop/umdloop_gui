@@ -30,6 +30,13 @@ const QUALITY_OPTIONS = ["low", "medium", "high", "ultra"];
 const DEFAULT_CAMERA_FPS = 10;
 const DEFAULT_CAMERA_QUALITY = "low";
 
+// camera_relay_node.py publishes /cameras/cam{N}/image_raw where N is the
+// device index. camera_0 → cam0, camera_1 → cam1, etc.
+function suggestRosTopic(cameraId) {
+  const match = cameraId.match(/(\d+)$/);
+  return match ? `/cameras/cam${match[1]}/image_raw` : "";
+}
+
 function CameraCard({ camera }) {
   const { cameras, stats, streams, enableCamera, disableCamera, renameCamera, setRole, setConfig } = useWebRTC();
   const [nameInput, setNameInput] = useState(camera.name ?? "");
@@ -38,6 +45,10 @@ function CameraCard({ camera }) {
   const [localFps, setLocalFps] = useState(camera.fps ?? DEFAULT_CAMERA_FPS);
   const [localQuality, setLocalQuality] = useState(camera.quality ?? DEFAULT_CAMERA_QUALITY);
   const [localExposure, setLocalExposure] = useState(camera.exposure ?? -1);
+  const [localUseRos, setLocalUseRos] = useState(camera.useRosTopic ?? false);
+  const [localRosTopic, setLocalRosTopic] = useState(
+    camera.rosTopic || suggestRosTopic(camera.id)
+  );
 
   const isEnabled = camera.enabled;
   const cameraStats = stats[camera.id];
@@ -65,8 +76,14 @@ function CameraCard({ camera }) {
   };
 
   const applyConfig = () => {
-    const config = { fps: localFps, quality: localQuality, exposure: localExposure };
-    if (selectedCap) {
+    const config = {
+      fps: localFps,
+      quality: localQuality,
+      exposure: localExposure,
+      useRosTopic: localUseRos,
+      rosTopic: localUseRos ? localRosTopic : "",
+    };
+    if (selectedCap && !localUseRos) {
       config.format = selectedCap.format;
       config.width = selectedCap.width;
       config.height = selectedCap.height;
@@ -197,6 +214,34 @@ function CameraCard({ camera }) {
               </button>
             ))}
           </div>
+        </div>
+
+        <div style={{ borderTop: "1px solid #3a3a3a", paddingTop: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer", fontSize: 11, color: "#aaa" }}>
+              <input
+                type="checkbox"
+                checked={localUseRos}
+                onChange={(e) => {
+                  setLocalUseRos(e.target.checked);
+                  if (e.target.checked && !localRosTopic)
+                    setLocalRosTopic(suggestRosTopic(camera.id));
+                }}
+              />
+              Use ROS topic
+            </label>
+            {localUseRos && (
+              <span style={{ fontSize: 10, color: "#888" }}>rosbridge :9090</span>
+            )}
+          </div>
+          {localUseRos && (
+            <input
+              value={localRosTopic}
+              onChange={(e) => setLocalRosTopic(e.target.value)}
+              style={{ ...inputStyle, fontFamily: "monospace" }}
+              placeholder="/cameras/cam0/image_raw"
+            />
+          )}
         </div>
 
         <div style={{ display: "flex", gap: 6 }}>

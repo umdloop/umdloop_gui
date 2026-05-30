@@ -17,7 +17,7 @@ export async function stopObjectDetection() {
   return res.json();
 }
 
-export async function sendPathPlan({ latitude, longitude, positionTolerance = 0.0, mode = "GNSS" }) {
+export async function sendPathPlan({ latitude, longitude, positionTolerance = 0.0, mode = "GNSS", objectClass }) {
   const res = await fetch(`${base()}/navigation/path-plan`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -26,6 +26,7 @@ export async function sendPathPlan({ latitude, longitude, positionTolerance = 0.
       longitude,
       position_tolerance: positionTolerance,
       mode,
+      ...(objectClass ? { object_class: objectClass } : {}),
     }),
   });
   return res.json();

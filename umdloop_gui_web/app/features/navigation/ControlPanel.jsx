@@ -10,6 +10,7 @@ import {
   setPendingWaypoints,
 } from "../../lib/pendingWaypointsStore";
 import { usePastWaypoints, setPastWaypoints as storeSortPrev } from "../../lib/pastWaypointsStore";
+import { OBJECT_DETECTION_CLASSES } from "../../config";
 
 const MODES = ["GNSS", "Object Detection", "Aruco Tag"];
 
@@ -30,6 +31,60 @@ function flatEarthDist(aLat, aLon, bLat, bLon) {
 async function fetchRoverPos() {
   const res = await fetch(`${getApiBaseUrl()}/navigation/rover-position`);
   return res.json();
+}
+
+// ── Goal Success Modal ────────────────────────────────────────────────────────
+
+function GoalSuccessModal({ onClose }) {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 9999,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "rgba(0,0,0,0.6)",
+      }}
+    >
+      <div
+        style={{
+          background: "#1a3322",
+          border: "2px solid #4ade80",
+          borderRadius: 16,
+          padding: "32px 40px",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 20,
+          minWidth: 280,
+          boxShadow: "0 8px 40px rgba(0,0,0,0.5)",
+        }}
+      >
+        <div style={{ fontSize: 40 }}>✓</div>
+        <div style={{ fontSize: 22, fontWeight: 900, color: "#4ade80", letterSpacing: 1 }}>
+          Goal Succeeded
+        </div>
+        <button
+          onClick={onClose}
+          style={{
+            marginTop: 4,
+            padding: "10px 40px",
+            borderRadius: "9999px",
+            border: "2px solid #4ade80",
+            background: "#166534",
+            color: "white",
+            fontWeight: 900,
+            fontSize: 15,
+            cursor: "pointer",
+          }}
+        >
+          OK
+        </button>
+      </div>
+    </div>
+  );
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -56,7 +111,7 @@ function SectionPanel({ children, style }) {
   );
 }
 
-function WaypointRow({ number, latitude, longitude, mode, isSelected, onSelect, onRemove }) {
+function WaypointRow({ number, latitude, longitude, mode, objectClass, isSelected, onSelect, onRemove }) {
   return (
     <div
       onClick={onSelect}
@@ -91,7 +146,7 @@ function WaypointRow({ number, latitude, longitude, mode, isSelected, onSelect, 
                 color: "white",
               }}
             >
-              {mode}
+              {mode}{objectClass ? `: ${objectClass}` : ""}
             </span>
           </div>
         )}
@@ -187,6 +242,7 @@ function WaypointList({ waypoints, selectedIds, onToggle, onRemove, emptyText })
           latitude={wp.latitude}
           longitude={wp.longitude}
           mode={wp.mode}
+          objectClass={wp.objectClass}
           isSelected={selectedIds.has(wp.id)}
           onSelect={() => onToggle(wp.id)}
           onRemove={onRemove ? () => onRemove(wp.id) : null}
@@ -203,7 +259,9 @@ export default function ControlPanel() {
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
   const [navMode, setNavMode] = useState("GNSS");
+  const [objectClass, setObjectClass] = useState(OBJECT_DETECTION_CLASSES[0]);
   const [addError, setAddError] = useState("");
+  const [showSuccessPopup, setShowSuccessPopup] = useState(false);
 
   // ── Pending Waypoints state ───────────────────────────────────────────────
   const pendingWaypoints = usePendingWaypoints();
@@ -232,8 +290,17 @@ export default function ControlPanel() {
       setAddError("Enter valid latitude and longitude before adding.");
       return;
     }
+    if (navMode === "Object Detection" && !objectClass) {
+      setAddError("Select a target class for Object Detection.");
+      return;
+    }
     setAddError("");
-    addPendingWaypoint({ latitude: lat, longitude: lon, mode: navMode });
+    addPendingWaypoint({
+      latitude: lat,
+      longitude: lon,
+      mode: navMode,
+      objectClass: navMode === "Object Detection" ? objectClass : undefined,
+    });
     setLatitude("");
     setLongitude("");
   };
@@ -310,6 +377,7 @@ export default function ControlPanel() {
           longitude: wp.longitude,
           positionTolerance: 0.0,
           mode: wp.mode,
+          objectClass: wp.objectClass,
         });
 
         if (data.ok === false) {
@@ -319,7 +387,10 @@ export default function ControlPanel() {
           return;
         }
 
-        if (data.success) removePendingWaypoint(wp.id);
+        if (data.success) {
+          removePendingWaypoint(wp.id);
+          setShowSuccessPopup(true);
+        }
       } catch {
         setQueueError(`WP ${i + 1}: Backend unreachable`);
         setQueueStatus("");
@@ -394,6 +465,7 @@ export default function ControlPanel() {
         setPrevError(data.error || "Navigation failed");
       } else {
         setPrevStatus(data.message || "Request sent");
+        if (data.success) setShowSuccessPopup(true);
       }
     } catch {
       setPrevStatus("");
@@ -412,6 +484,8 @@ export default function ControlPanel() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px", alignItems: "flex-start" }}>
+
+      {showSuccessPopup && <GoalSuccessModal onClose={() => setShowSuccessPopup(false)} />}
 
       {/* ── Control Panel ── */}
       <SectionPanel>
@@ -462,6 +536,21 @@ export default function ControlPanel() {
             </label>
           ))}
         </div>
+
+        {navMode === "Object Detection" && (
+          <div>
+            <div style={{ fontWeight: 800, marginBottom: 8 }}>Target Class</div>
+            <select
+              value={objectClass}
+              onChange={(e) => setObjectClass(e.target.value)}
+              style={inputStyle}
+            >
+              {OBJECT_DETECTION_CLASSES.map((cls) => (
+                <option key={cls} value={cls}>{cls}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <button
           onClick={onAdd}

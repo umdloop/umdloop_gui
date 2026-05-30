@@ -34,3 +34,23 @@ export const CAMERA_ROLES = {
   SAMPLER:      "sampler",
   NIGHT_VISION: "night_vision",
 };
+
+// Target classes the YOLO node detects (mirror `target_classes` in
+// yolo_ros_node.py). Selectable as the goal when navigating in Object
+// Detection mode.
+export const OBJECT_DETECTION_CLASSES = ["Bottle", "Mallet", "Rock-Pick-Hammer"];
+
+// Maps a YOLO camera index (position in yolo_params.yaml image_topics list,
+// publishes to /yolo/cam{index}/...) to the WebRTC camera role.
+//
+// yolo_params.yaml order:
+//   0: /zed/zed_node/...        (ZED → assign "front" role in Camera Manager)
+//   1: /cameras/cam0/image_raw  (USB cam 0 → assign whatever role fits)
+//   2: /cameras/cam1/image_raw  (USB cam 1 → left_side)
+//   3: /cameras/cam2/image_raw  (USB cam 2 → right_side)
+export const YOLO_CAMERA_MAP = {
+  0: CAMERA_ROLES.FRONT,
+  1: CAMERA_ROLES.BACK,
+  2: CAMERA_ROLES.LEFT_SIDE,
+  3: CAMERA_ROLES.RIGHT_SIDE,
+};

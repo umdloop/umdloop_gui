@@ -37,6 +37,23 @@ export const TECHNICIAN_TOPICS = {
   },
 };
 
+// Base namespace the YOLO node publishes under: /yolo/{index}/...
+export const YOLO_TOPIC_NS = process.env.NEXT_PUBLIC_YOLO_TOPIC_NS || "/yolo";
+
+// vision_msgs/msg/Detection2DArray topic for a given YOLO camera index.
+// bbox coords are normalized to [0, 1] of the source image (see yolo_ros_node.py).
+export function yoloDetectionsTopic(index) {
+  return {
+    name: `${YOLO_TOPIC_NS}/cam${index}/detections`,
+    messageType: "vision_msgs/msg/Detection2DArray",
+  };
+}
+
+// Latched String carrying the active Object Detection target class.
+export const OBJECT_CLASS_TOPIC = {
+  name: process.env.NEXT_PUBLIC_OBJECT_CLASS_TOPIC || "/object_class",
+  messageType: "std_msgs/msg/String",
+};
 export const FLUOROMETER_COMMAND_TOPICS = {
   ledCommand: {
     name: process.env.NEXT_PUBLIC_GUI_FLUORO_LED_COMMAND_TOPIC || "/fluoro_led_gpio_controller/commands",

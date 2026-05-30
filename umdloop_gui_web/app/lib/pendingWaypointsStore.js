@@ -28,8 +28,8 @@ export function usePendingWaypoints() {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
-export function addPendingWaypoint({ latitude, longitude, mode }) {
-  _waypoints = [..._waypoints, { id: _idCounter++, latitude, longitude, mode }];
+export function addPendingWaypoint({ latitude, longitude, mode, objectClass }) {
+  _waypoints = [..._waypoints, { id: _idCounter++, latitude, longitude, mode, objectClass }];
   notify();
 }
 
