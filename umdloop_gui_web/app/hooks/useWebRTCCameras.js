@@ -152,7 +152,6 @@ export default function useWebRTCCameras(url) {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-<<<<<<< HEAD
       // Backend's RTSP publish handshake can lag the WS state broadcast by
       // a few hundred ms — and with several cameras starting at once, MediaMTX
       // can take much longer than the old 3s budget to register the publisher.
@@ -160,25 +159,14 @@ export default function useWebRTCCameras(url) {
       let res;
       let delayMs = 300;
       while (pcsRef.current.get(id) === pc) {
-=======
-      // For ROS-topic cameras the subprocess (Python + GStreamer + rosbridge)
-      // can take 5–10 s to start publishing RTSP. Retry for up to 30 s.
-      let res;
-      for (let attempt = 0; attempt < 60; attempt++) {
-        if (!pcsRef.current.has(id)) return;
->>>>>>> cfb614b (Object Detection updates)
         res = await fetch(`${whepBase}/${id}/whep`, {
           method: "POST",
           headers: { "Content-Type": "application/sdp" },
           body: offer.sdp,
         });
         if (res.ok || res.status !== 404) break;
-<<<<<<< HEAD
         await new Promise((r) => setTimeout(r, delayMs));
         delayMs = Math.min(delayMs * 1.5, 2000);
-=======
-        await new Promise((r) => setTimeout(r, 500));
->>>>>>> cfb614b (Object Detection updates)
       }
       if (pcsRef.current.get(id) !== pc) return; // stopped or replaced while waiting
       if (!res?.ok) throw new Error(`WHEP ${res?.status}`);
